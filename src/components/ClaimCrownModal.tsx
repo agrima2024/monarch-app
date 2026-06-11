@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { formatCoordinates } from "@/lib/display";
-import type { Location, ValidationResult } from "@/lib/types";
+import { validateClaim } from "@/lib/validate-claim";
+import type { Location } from "@/lib/types";
 
 interface ClaimCrownModalProps {
   location: Location;
@@ -60,34 +61,20 @@ export function ClaimCrownModal({
     setIsSubmitting(true);
     setGuardMessage(null);
 
-    try {
-      const formData = new FormData();
-      formData.append("photo", photoFile);
-      formData.append("review_text", reviewText);
-      formData.append("place_name", placeName.trim());
+    await new Promise((r) => setTimeout(r, 600));
 
-      const response = await fetch("/api/validate-claim", {
-        method: "POST",
-        body: formData,
-      });
+    const result = validateClaim(reviewText, placeName.trim(), photoFile);
 
-      const result: ValidationResult = await response.json();
-
-      if (result.approved) {
-        onSuccess(placeName.trim(), reviewText, photoPreview!);
-      } else {
-        setGuardMessage(
-          result.royal_guard_message ??
-            "The Royal Guard has denied your claim. Try again!"
-        );
-      }
-    } catch {
+    if (result.approved) {
+      onSuccess(placeName.trim(), reviewText, photoPreview!);
+    } else {
       setGuardMessage(
-        "The Royal Guard is unreachable. Check your connection and try again."
+        result.royal_guard_message ??
+          "The Royal Guard has denied your claim. Try again!"
       );
-    } finally {
-      setIsSubmitting(false);
     }
+
+    setIsSubmitting(false);
   };
 
   return (
