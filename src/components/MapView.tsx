@@ -3,15 +3,16 @@
 import L from "leaflet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  DUMMY_CLAIMS,
-  DUMMY_LOCATIONS,
   getClaimsForUser,
-  getFriendIds,
-  getProfileById,
   getUsernameInitial,
 } from "@/lib/dummy-data";
 import { getDisplayName } from "@/lib/display";
 import { loadStoredClaims, loadUserLocations, saveStoredClaims, saveUserLocations } from "@/lib/claim-storage";
+import { loadGlobalClaims, publishClaim } from "@/lib/global-claims";
+import {
+  loadGlobalLocations,
+  publishLocation,
+} from "@/lib/global-locations";
 import {
   CLAIM_HERE_MIN_DISTANCE_METERS,
   CLAIM_RADIUS_METERS,
@@ -29,6 +30,8 @@ import { MonarchLegend } from "./MonarchLegend";
 import { ProfilePanel } from "./ProfilePanel";
 import { TabToggle } from "./TabToggle";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFriendships } from "@/contexts/FriendshipsContext";
+import { getUserProfile } from "@/lib/user-registry";
 
 const SF_CENTER: [number, number] = [37.7749, -122.4194];
 const TILE_URL =
@@ -37,15 +40,16 @@ const TILE_URL =
 function resolveMonarchClaims(
   claims: Claim[],
   tab: MapTab,
-  userId: string
+  userId: string,
+  friendIds: string[]
 ): Map<string, Claim> {
-  const friendIds = new Set([userId, ...getFriendIds(userId)]);
+  const circleIds = new Set([userId, ...friendIds]);
 
   if (tab === "community") {
     return new Map(claims.map((c) => [c.location_id, c]));
   }
 
-  const friendClaims = claims.filter((c) => friendIds.has(c.user_id));
+  const friendClaims = claims.filter((c) => circleIds.has(c.user_id));
   const byLocation = new Map<string, Claim[]>();
 
   for (const claim of friendClaims) {
@@ -93,6 +97,7 @@ function findLocationById(
 
 export function MapView() {
   const { user } = useAuth();
+  const { friendIds } = useFriendships();
   const currentUserId = user!.id;
   const currentUsername = user!.username;
 
@@ -105,7 +110,7 @@ export function MapView() {
   const hasCenteredOnUser = useRef(false);
 
   const [activeTab, setActiveTab] = useState<MapTab>("community");
-  const [claims, setClaims] = useState<Claim[]>(DUMMY_CLAIMS);
+  const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedLocation, setSelectedLocation] =
     useState<LocationWithClaim | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
@@ -126,6 +131,7 @@ export function MapView() {
   const [userClaimedLocations, setUserClaimedLocations] = useState<Location[]>(
     []
   );
+  const [sharedLocations, setSharedLocations] = useState<Location[]>([]);
   const [claimToast, setClaimToast] = useState<string | null>(null);
 
   const allLocations = useMemo(() => {
@@ -133,7 +139,7 @@ export function MapView() {
     const merged: Location[] = [];
 
     for (const loc of [
-      ...DUMMY_LOCATIONS,
+      ...sharedLocations,
       ...localLocations,
       ...userClaimedLocations,
     ]) {
@@ -143,18 +149,15 @@ export function MapView() {
     }
 
     return merged;
-  }, [localLocations, userClaimedLocations]);
+  }, [sharedLocations, localLocations, userClaimedLocations]);
 
   const monarchClaims = useMemo(
-    () => resolveMonarchClaims(claims, activeTab, currentUserId),
-    [claims, activeTab, currentUserId]
+    () => resolveMonarchClaims(claims, activeTab, currentUserId, friendIds),
+    [claims, activeTab, currentUserId, friendIds]
   );
 
   const locationsWithClaims: LocationWithClaim[] = useMemo(() => {
-    const friendIds = new Set([
-      currentUserId,
-      ...getFriendIds(currentUserId),
-    ]);
+    const circleIds = new Set([currentUserId, ...friendIds]);
 
     return allLocations.map((loc) => {
       const claim = monarchClaims.get(loc.id);
@@ -166,13 +169,13 @@ export function MapView() {
         isMonarch: !!claim,
         ...(activeTab === "friends" &&
           globalClaim &&
-          !friendIds.has(globalClaim.user_id) && {
+          !circleIds.has(globalClaim.user_id) && {
             claim: undefined,
             isMonarch: false,
           }),
       };
     });
-  }, [monarchClaims, claims, activeTab, allLocations, currentUserId]);
+  }, [monarchClaims, claims, activeTab, allLocations, currentUserId, friendIds]);
 
   const conqueredLocations = useMemo(
     () => locationsWithClaims.filter((loc) => loc.claim),
@@ -192,8 +195,9 @@ export function MapView() {
   useEffect(() => {
     const stored = loadStoredClaims(currentUserId);
     const storedLocations = loadUserLocations(currentUserId);
+    const globalClaims = loadGlobalClaims();
+    const globalLocations = loadGlobalLocations();
 
-    // Drop legacy single-use "claim-here" entries that lost their coordinates.
     const migratedClaims = stored.filter((c) => c.location_id !== "claim-here");
     const migratedLocations = storedLocations.filter(
       (l) => l.id !== "claim-here"
@@ -209,16 +213,26 @@ export function MapView() {
     if (migratedLocations.length > 0) {
       setUserClaimedLocations(migratedLocations);
     }
-    if (migratedClaims.length === 0) return;
-    setClaims((prev) => {
-      const ids = new Set(prev.map((c) => c.id));
-      return [...prev, ...migratedClaims.filter((c) => !ids.has(c.id))];
-    });
+
+    setSharedLocations(globalLocations);
+
+    const mergedClaims = [...globalClaims];
+    const claimIds = new Set(mergedClaims.map((claim) => claim.id));
+    for (const claim of migratedClaims) {
+      if (!claimIds.has(claim.id)) {
+        mergedClaims.push(claim);
+        claimIds.add(claim.id);
+      }
+    }
+
+    if (mergedClaims.length > 0) {
+      setClaims(mergedClaims);
+    }
   }, [currentUserId]);
 
   const currentUserProfile = useMemo(
     () =>
-      getProfileById(currentUserId) ?? {
+      getUserProfile(currentUserId) ?? {
         id: currentUserId,
         username: currentUsername,
         avatar_url: null,
@@ -231,7 +245,7 @@ export function MapView() {
     selectedProfileId === currentUserId
       ? currentUserProfile
       : selectedProfileId
-        ? getProfileById(selectedProfileId)
+        ? getUserProfile(selectedProfileId)
         : undefined;
 
   useEffect(() => {
@@ -385,7 +399,7 @@ export function MapView() {
     conqueredLocations.forEach((location) => {
       const claim = location.claim!;
       const monarch = getMonarchColor(claim.user_id);
-      const profile = getProfileById(claim.user_id);
+      const profile = getUserProfile(claim.user_id);
       const placeName = getDisplayName(location);
       const initial = profile
         ? getUsernameInitial(profile.username)
@@ -574,6 +588,11 @@ export function MapView() {
       saveUserLocations(next, currentUserId);
       return next;
     });
+    publishLocation(claimedSpot);
+    setSharedLocations((prev) => [
+      ...prev.filter((l) => l.id !== claimedSpot.id),
+      claimedSpot,
+    ]);
 
     const newClaim: Claim = {
       id: `claim-${Date.now()}`,
@@ -586,8 +605,9 @@ export function MapView() {
     };
 
     setClaims((prev) => {
-      const next = [...prev, newClaim];
+      const next = [...prev.filter((c) => c.location_id !== newClaim.location_id), newClaim];
       saveStoredClaims(next, currentUserId);
+      publishClaim(newClaim);
       return next;
     });
     setClaimingLocation(null);

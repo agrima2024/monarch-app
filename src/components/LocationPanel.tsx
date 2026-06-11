@@ -8,7 +8,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { getProfileById } from "@/lib/dummy-data";
+import { getUserProfile } from "@/lib/user-registry";
 import { formatCoordinates, getDisplayName, isUnexplored } from "@/lib/display";
 import { getMonarchColor } from "@/lib/monarch-colors";
 import type { LocationWithClaim } from "@/lib/types";
@@ -27,7 +27,7 @@ export function LocationPanel({
   onClose,
 }: LocationPanelProps) {
   const claim = location.claim;
-  const monarch = claim ? getProfileById(claim.user_id) : null;
+  const monarch = claim ? getUserProfile(claim.user_id) : null;
   const unexplored = isUnexplored(location);
   const displayName = getDisplayName(location);
   const monarchColor = claim ? getMonarchColor(claim.user_id) : null;

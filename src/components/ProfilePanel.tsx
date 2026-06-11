@@ -1,7 +1,7 @@
 "use client";
 
 import { Crown, MapPin, User, X } from "lucide-react";
-import { getUsernameInitial } from "@/lib/dummy-data";
+import { getUsernameInitial } from "@/lib/user-registry";
 import { getMonarchColor } from "@/lib/monarch-colors";
 import type { Claim, LocationWithClaim, Profile } from "@/lib/types";
 

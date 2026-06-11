@@ -10,8 +10,9 @@ This URL is hosted on GitHub Pages and stays online 24/7 — no tunnel or local 
 
 ## Features
 
-- **Login** — email/password via Supabase, or demo username login on GitHub Pages
-- **Dual-tab map** — Community (global monarchs) and Friends (inner-circle monarchs)
+- **Login** — Sign up / Sign in with username and password (or Supabase email when configured)
+- **Friends** — Send requests by username; both people must accept before sharing a Friends Circle
+- **Dual-tab map** — Community (all explorers on this device) and Friends (you + accepted friends only)
 - **Venue-sized kingdom zones** — colored footprints per monarch
 - **Claim Crown flow** — Live photo + review with Royal Guard validation
 - **Monarch profiles** — tap a person icon to see conquered land

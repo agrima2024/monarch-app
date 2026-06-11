@@ -15,14 +15,19 @@ import {
   saveDemoSession,
   type AppUser,
 } from "@/lib/auth/session";
+import {
+  authenticateLocalUser,
+  registerLocalUser,
+} from "@/lib/user-registry";
 import { createClient } from "@/lib/supabase/client";
 
 interface AuthContextValue {
   user: AppUser | null;
   isLoading: boolean;
   isSupabaseMode: boolean;
-  signInDemo: (username: string) => Promise<void>;
+  signInLocal: (username: string, password: string) => Promise<string | null>;
   signInWithPassword: (email: string, password: string) => Promise<string | null>;
+  signUpLocal: (username: string, password: string) => Promise<string | null>;
   signUp: (
     email: string,
     password: string,
@@ -32,8 +37,6 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-const DEMO_USER_ID = "current-user";
 
 function usernameFromEmail(email: string): string {
   return email.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "_") || "explorer";
@@ -121,26 +124,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isSupabaseMode]);
 
-  const signInDemo = useCallback(async (username: string) => {
-    const trimmed = username.trim().replace(/^@/, "");
-    if (trimmed.length < 2) {
-      throw new Error("Choose a username with at least 2 characters.");
+  const signInLocal = useCallback(async (username: string, password: string) => {
+    const account = authenticateLocalUser(username, password);
+    if (!account) {
+      return "Wrong username or password.";
     }
 
-    const demoUser: AppUser = {
-      id: DEMO_USER_ID,
-      username: trimmed,
+    const appUser: AppUser = {
+      id: account.id,
+      username: account.username,
       mode: "demo",
     };
 
-    saveDemoSession(demoUser);
-    setUser(demoUser);
+    saveDemoSession(appUser);
+    setUser(appUser);
+    return null;
+  }, []);
+
+  const signUpLocal = useCallback(async (username: string, password: string) => {
+    const result = registerLocalUser(username, password);
+    if ("error" in result) return result.error;
+
+    const appUser: AppUser = {
+      id: result.user.id,
+      username: result.user.username,
+      mode: "demo",
+    };
+
+    saveDemoSession(appUser);
+    setUser(appUser);
+    return null;
   }, []);
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
       if (!isSupabaseMode) {
-        return "Supabase is not configured. Use demo login instead.";
+        return "Use username and password to sign in.";
       }
 
       const supabase = createClient();
@@ -157,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = useCallback(
     async (email: string, password: string, username: string) => {
       if (!isSupabaseMode) {
-        return "Supabase is not configured. Use demo login instead.";
+        return "Use username and password to sign up.";
       }
 
       const trimmedUsername = username.trim().replace(/^@/, "");
@@ -195,8 +214,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isLoading,
       isSupabaseMode,
-      signInDemo,
+      signInLocal,
       signInWithPassword,
+      signUpLocal,
       signUp,
       signOut,
     }),
@@ -204,8 +224,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isLoading,
       isSupabaseMode,
-      signInDemo,
+      signInLocal,
       signInWithPassword,
+      signUpLocal,
       signUp,
       signOut,
     ]

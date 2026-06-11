@@ -1,7 +1,7 @@
 "use client";
 
 import { getMonarchColor } from "@/lib/monarch-colors";
-import { getProfileById } from "@/lib/dummy-data";
+import { getUserProfile } from "@/lib/user-registry";
 
 interface MonarchLegendProps {
   activeUserIds: string[];
@@ -16,7 +16,7 @@ export function MonarchLegend({
 }: MonarchLegendProps) {
   const entries = activeUserIds
     .map((id) => {
-      const profile = getProfileById(id);
+      const profile = getUserProfile(id);
       const color = getMonarchColor(id);
       return { id, username: profile?.username ?? color.label, color };
     })
