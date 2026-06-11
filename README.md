@@ -10,6 +10,7 @@ This URL is hosted on GitHub Pages and stays online 24/7 — no tunnel or local 
 
 ## Features
 
+- **Login** — email/password via Supabase, or demo username login on GitHub Pages
 - **Dual-tab map** — Community (global monarchs) and Friends (inner-circle monarchs)
 - **Venue-sized kingdom zones** — colored footprints per monarch
 - **Claim Crown flow** — Live photo + review with Royal Guard validation

@@ -3,7 +3,6 @@
 import L from "leaflet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CURRENT_USER_ID,
   DUMMY_CLAIMS,
   DUMMY_LOCATIONS,
   getClaimsForUser,
@@ -29,6 +28,7 @@ import { LocationPanel } from "./LocationPanel";
 import { MonarchLegend } from "./MonarchLegend";
 import { ProfilePanel } from "./ProfilePanel";
 import { TabToggle } from "./TabToggle";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SF_CENTER: [number, number] = [37.7749, -122.4194];
 const TILE_URL =
@@ -92,6 +92,10 @@ function findLocationById(
 }
 
 export function MapView() {
+  const { user } = useAuth();
+  const currentUserId = user!.id;
+  const currentUsername = user!.username;
+
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const zonesRef = useRef<L.Rectangle[]>([]);
@@ -142,14 +146,14 @@ export function MapView() {
   }, [localLocations, userClaimedLocations]);
 
   const monarchClaims = useMemo(
-    () => resolveMonarchClaims(claims, activeTab, CURRENT_USER_ID),
-    [claims, activeTab]
+    () => resolveMonarchClaims(claims, activeTab, currentUserId),
+    [claims, activeTab, currentUserId]
   );
 
   const locationsWithClaims: LocationWithClaim[] = useMemo(() => {
     const friendIds = new Set([
-      CURRENT_USER_ID,
-      ...getFriendIds(CURRENT_USER_ID),
+      currentUserId,
+      ...getFriendIds(currentUserId),
     ]);
 
     return allLocations.map((loc) => {
@@ -168,7 +172,7 @@ export function MapView() {
           }),
       };
     });
-  }, [monarchClaims, claims, activeTab, allLocations]);
+  }, [monarchClaims, claims, activeTab, allLocations, currentUserId]);
 
   const conqueredLocations = useMemo(
     () => locationsWithClaims.filter((loc) => loc.claim),
@@ -186,8 +190,8 @@ export function MapView() {
   );
 
   useEffect(() => {
-    const stored = loadStoredClaims();
-    const storedLocations = loadUserLocations();
+    const stored = loadStoredClaims(currentUserId);
+    const storedLocations = loadUserLocations(currentUserId);
 
     // Drop legacy single-use "claim-here" entries that lost their coordinates.
     const migratedClaims = stored.filter((c) => c.location_id !== "claim-here");
@@ -198,8 +202,8 @@ export function MapView() {
       migratedClaims.length !== stored.length ||
       migratedLocations.length !== storedLocations.length
     ) {
-      saveStoredClaims(migratedClaims);
-      saveUserLocations(migratedLocations);
+      saveStoredClaims(migratedClaims, currentUserId);
+      saveUserLocations(migratedLocations, currentUserId);
     }
 
     if (migratedLocations.length > 0) {
@@ -210,11 +214,25 @@ export function MapView() {
       const ids = new Set(prev.map((c) => c.id));
       return [...prev, ...migratedClaims.filter((c) => !ids.has(c.id))];
     });
-  }, []);
+  }, [currentUserId]);
 
-  const selectedProfile = selectedProfileId
-    ? getProfileById(selectedProfileId)
-    : undefined;
+  const currentUserProfile = useMemo(
+    () =>
+      getProfileById(currentUserId) ?? {
+        id: currentUserId,
+        username: currentUsername,
+        avatar_url: null,
+        created_at: new Date().toISOString(),
+      },
+    [currentUserId, currentUsername]
+  );
+
+  const selectedProfile =
+    selectedProfileId === currentUserId
+      ? currentUserProfile
+      : selectedProfileId
+        ? getProfileById(selectedProfileId)
+        : undefined;
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -464,10 +482,8 @@ export function MapView() {
     const map = mapRef.current;
     if (!map) return;
 
-    const youColor = getMonarchColor(CURRENT_USER_ID);
-    const youInitial = getUsernameInitial(
-      getProfileById(CURRENT_USER_ID)?.username ?? "you"
-    );
+    const youColor = getMonarchColor(currentUserId);
+    const youInitial = getUsernameInitial(currentUserProfile.username);
 
     if (userMarkerRef.current) {
       userMarkerRef.current.setLatLng([userPosition.lat, userPosition.lng]);
@@ -479,7 +495,7 @@ export function MapView() {
         .addTo(map)
         .on("click", (e) => {
           L.DomEvent.stopPropagation(e);
-          openProfile(CURRENT_USER_ID);
+          openProfile(currentUserId);
         });
 
       userMarkerRef.current.bindTooltip("You", {
@@ -488,7 +504,7 @@ export function MapView() {
         className: "monarch-tooltip",
       });
     }
-  }, [userPosition, openProfile]);
+  }, [userPosition, openProfile, currentUserId, currentUserProfile.username]);
 
   const canClaimLocation = useCallback(
     (location: LocationWithClaim) => {
@@ -512,7 +528,7 @@ export function MapView() {
   );
 
   const canClaimHere = useMemo(() => {
-    const myClaims = claims.filter((c) => c.user_id === CURRENT_USER_ID);
+    const myClaims = claims.filter((c) => c.user_id === currentUserId);
     for (const claim of myClaims) {
       const loc = findLocationById(allLocations, claim.location_id);
       if (!loc) continue;
@@ -528,7 +544,7 @@ export function MapView() {
       }
     }
     return true;
-  }, [claims, userPosition, allLocations]);
+  }, [claims, userPosition, allLocations, currentUserId]);
 
   const startClaimHere = useCallback(() => {
     setSelectedProfileId(null);
@@ -555,14 +571,14 @@ export function MapView() {
 
     setUserClaimedLocations((prev) => {
       const next = [...prev.filter((l) => l.id !== claimedSpot.id), claimedSpot];
-      saveUserLocations(next);
+      saveUserLocations(next, currentUserId);
       return next;
     });
 
     const newClaim: Claim = {
       id: `claim-${Date.now()}`,
       location_id: claimingLocation.id,
-      user_id: CURRENT_USER_ID,
+      user_id: currentUserId,
       place_name: placeName,
       photo_url: photoPreview,
       review_text: reviewText,
@@ -571,7 +587,7 @@ export function MapView() {
 
     setClaims((prev) => {
       const next = [...prev, newClaim];
-      saveStoredClaims(next);
+      saveStoredClaims(next, currentUserId);
       return next;
     });
     setClaimingLocation(null);

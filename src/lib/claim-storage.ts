@@ -1,13 +1,24 @@
 import type { Claim, Location } from "./types";
 
-const CLAIMS_KEY = "monarch-user-claims";
-const LOCATIONS_KEY = "monarch-user-locations";
-export const CURRENT_USER_STORAGE_ID = "current-user";
+const LEGACY_CLAIMS_KEY = "monarch-user-claims";
+const LEGACY_LOCATIONS_KEY = "monarch-user-locations";
 
-export function loadStoredClaims(): Claim[] {
+function claimsKey(userId: string): string {
+  return `monarch-user-claims:${userId}`;
+}
+
+function locationsKey(userId: string): string {
+  return `monarch-user-locations:${userId}`;
+}
+
+export function loadStoredClaims(userId: string): Claim[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(CLAIMS_KEY);
+    const raw =
+      localStorage.getItem(claimsKey(userId)) ??
+      (userId === "current-user"
+        ? localStorage.getItem(LEGACY_CLAIMS_KEY)
+        : null);
     if (!raw) return [];
     return JSON.parse(raw) as Claim[];
   } catch {
@@ -15,20 +26,24 @@ export function loadStoredClaims(): Claim[] {
   }
 }
 
-export function saveStoredClaims(claims: Claim[]): void {
+export function saveStoredClaims(claims: Claim[], userId: string): void {
   if (typeof window === "undefined") return;
   try {
-    const mine = claims.filter((c) => c.user_id === CURRENT_USER_STORAGE_ID);
-    localStorage.setItem(CLAIMS_KEY, JSON.stringify(mine));
+    const mine = claims.filter((c) => c.user_id === userId);
+    localStorage.setItem(claimsKey(userId), JSON.stringify(mine));
   } catch {
     // ignore quota errors
   }
 }
 
-export function loadUserLocations(): Location[] {
+export function loadUserLocations(userId: string): Location[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(LOCATIONS_KEY);
+    const raw =
+      localStorage.getItem(locationsKey(userId)) ??
+      (userId === "current-user"
+        ? localStorage.getItem(LEGACY_LOCATIONS_KEY)
+        : null);
     if (!raw) return [];
     return JSON.parse(raw) as Location[];
   } catch {
@@ -36,10 +51,13 @@ export function loadUserLocations(): Location[] {
   }
 }
 
-export function saveUserLocations(locations: Location[]): void {
+export function saveUserLocations(
+  locations: Location[],
+  userId: string
+): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(LOCATIONS_KEY, JSON.stringify(locations));
+    localStorage.setItem(locationsKey(userId), JSON.stringify(locations));
   } catch {
     // ignore quota errors
   }
