@@ -1,0 +1,18 @@
+{
+  "name": "Monarch",
+  "short_name": "Monarch",
+  "description": "Claim your kingdom — location-based social discovery",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0a09",
+  "theme_color": "#0c0a09",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,529 @@
+"use client";
+
+import L from "leaflet";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CURRENT_USER_ID,
+  DUMMY_CLAIMS,
+  DUMMY_LOCATIONS,
+  getClaimsForUser,
+  getFriendIds,
+  getProfileById,
+  getUsernameInitial,
+} from "@/lib/dummy-data";
+import { getDisplayName } from "@/lib/display";
+import {
+  CLAIM_RADIUS_METERS,
+  haversineDistanceMeters,
+  USER_MAP_ZOOM,
+  venueBounds,
+} from "@/lib/geo";
+import { getMonarchColor } from "@/lib/monarch-colors";
+import type { Claim, LocationWithClaim, MapTab } from "@/lib/types";
+import { ClaimCrownModal } from "./ClaimCrownModal";
+import { LocationPanel } from "./LocationPanel";
+import { MonarchLegend } from "./MonarchLegend";
+import { ProfilePanel } from "./ProfilePanel";
+import { TabToggle } from "./TabToggle";
+
+const SF_CENTER: [number, number] = [37.7749, -122.4194];
+const TILE_URL =
+  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+
+function resolveMonarchClaims(
+  claims: Claim[],
+  tab: MapTab,
+  userId: string
+): Map<string, Claim> {
+  const friendIds = new Set([userId, ...getFriendIds(userId)]);
+
+  if (tab === "community") {
+    return new Map(claims.map((c) => [c.location_id, c]));
+  }
+
+  const friendClaims = claims.filter((c) => friendIds.has(c.user_id));
+  const byLocation = new Map<string, Claim[]>();
+
+  for (const claim of friendClaims) {
+    const existing = byLocation.get(claim.location_id) ?? [];
+    existing.push(claim);
+    byLocation.set(claim.location_id, existing);
+  }
+
+  const result = new Map<string, Claim>();
+  for (const [locationId, locationClaims] of byLocation) {
+    const earliest = locationClaims.sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )[0];
+    result.set(locationId, earliest);
+  }
+
+  return result;
+}
+
+function createPersonIcon(
+  color: string,
+  stroke: string,
+  initial: string,
+  size = 32
+): L.DivIcon {
+  return L.divIcon({
+    className: "",
+    html: `<div style="display:flex;align-items:center;justify-content:center;cursor:pointer;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.45));">
+      <div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid ${stroke};font-size:${size * 0.4}px;font-weight:700;color:#0c0a09;">${initial}</div>
+    </div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+export function MapView() {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const zonesRef = useRef<L.Rectangle[]>([]);
+  const markersRef = useRef<L.Marker[]>([]);
+  const nearbyRef = useRef<L.Rectangle | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
+  const hasCenteredOnUser = useRef(false);
+
+  const [activeTab, setActiveTab] = useState<MapTab>("community");
+  const [claims, setClaims] = useState<Claim[]>(DUMMY_CLAIMS);
+  const [selectedLocation, setSelectedLocation] =
+    useState<LocationWithClaim | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
+    null
+  );
+  const [claimingLocation, setClaimingLocation] =
+    useState<LocationWithClaim | null>(null);
+  const [nearbyUnexplored, setNearbyUnexplored] =
+    useState<LocationWithClaim | null>(null);
+  const [userPosition, setUserPosition] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+
+  const monarchClaims = useMemo(
+    () => resolveMonarchClaims(claims, activeTab, CURRENT_USER_ID),
+    [claims, activeTab]
+  );
+
+  const locationsWithClaims: LocationWithClaim[] = useMemo(() => {
+    const friendIds = new Set([
+      CURRENT_USER_ID,
+      ...getFriendIds(CURRENT_USER_ID),
+    ]);
+
+    return DUMMY_LOCATIONS.map((loc) => {
+      const claim = monarchClaims.get(loc.id);
+      const globalClaim = claims.find((c) => c.location_id === loc.id);
+
+      return {
+        ...loc,
+        claim,
+        isMonarch: !!claim,
+        ...(activeTab === "friends" &&
+          globalClaim &&
+          !friendIds.has(globalClaim.user_id) && {
+            claim: undefined,
+            isMonarch: false,
+          }),
+      };
+    });
+  }, [monarchClaims, claims, activeTab]);
+
+  const conqueredLocations = useMemo(
+    () => locationsWithClaims.filter((loc) => loc.claim),
+    [locationsWithClaims]
+  );
+
+  const unexploredLocations = useMemo(
+    () => locationsWithClaims.filter((loc) => !loc.claim),
+    [locationsWithClaims]
+  );
+
+  const activeMonarchIds = useMemo(
+    () => conqueredLocations.map((l) => l.claim!.user_id),
+    [conqueredLocations]
+  );
+
+  const selectedProfile = selectedProfileId
+    ? getProfileById(selectedProfileId)
+    : undefined;
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          setUserPosition({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          }),
+        () => setUserPosition({ lat: SF_CENTER[0], lng: SF_CENTER[1] })
+      );
+    } else {
+      setUserPosition({ lat: SF_CENTER[0], lng: SF_CENTER[1] });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!userPosition) {
+      setNearbyUnexplored(null);
+      return;
+    }
+
+    let closest: LocationWithClaim | null = null;
+    let closestDist = Infinity;
+
+    for (const loc of unexploredLocations) {
+      const dist = haversineDistanceMeters(
+        userPosition.lat,
+        userPosition.lng,
+        loc.latitude,
+        loc.longitude
+      );
+      if (dist <= CLAIM_RADIUS_METERS && dist < closestDist) {
+        closest = loc;
+        closestDist = dist;
+      }
+    }
+
+    setNearbyUnexplored(closest);
+  }, [userPosition, unexploredLocations]);
+
+  useEffect(() => {
+    if (!mapContainer.current || mapRef.current) return;
+
+    const map = L.map(mapContainer.current, {
+      center: SF_CENTER,
+      zoom: USER_MAP_ZOOM,
+      zoomControl: false,
+    });
+
+    L.tileLayer(TILE_URL, {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: "abcd",
+      maxZoom: 19,
+    }).addTo(map);
+
+    L.control.zoom({ position: "topright" }).addTo(map);
+    mapRef.current = map;
+    map.on("click", () => {
+      setSelectedLocation(null);
+      setSelectedProfileId(null);
+    });
+    requestAnimationFrame(() => map.invalidateSize());
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Center on user when location is first known
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !userPosition || hasCenteredOnUser.current) return;
+
+    map.flyTo([userPosition.lat, userPosition.lng], USER_MAP_ZOOM, {
+      duration: 1.2,
+    });
+    hasCenteredOnUser.current = true;
+  }, [userPosition]);
+
+  const openLocation = useCallback((location: LocationWithClaim) => {
+    setSelectedLocation(location);
+    setSelectedProfileId(null);
+  }, []);
+
+  const openProfile = useCallback((userId: string) => {
+    setSelectedProfileId(userId);
+    setSelectedLocation(null);
+    setClaimingLocation(null);
+  }, []);
+
+  const flyToLocation = useCallback((location: LocationWithClaim) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo([location.latitude, location.longitude], USER_MAP_ZOOM, {
+      duration: 0.8,
+    });
+  }, []);
+
+  const flyToUserLands = useCallback(
+    (userId: string) => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      const userClaims = getClaimsForUser(userId, claims);
+      const bounds = L.latLngBounds([]);
+
+      for (const claim of userClaims) {
+        const loc = DUMMY_LOCATIONS.find((l) => l.id === claim.location_id);
+        if (!loc) continue;
+        const [[s, w], [n, e]] = venueBounds(loc.latitude, loc.longitude);
+        bounds.extend([s, w]);
+        bounds.extend([n, e]);
+      }
+
+      if (bounds.isValid()) {
+        map.flyToBounds(bounds, {
+          padding: [48, 48],
+          maxZoom: USER_MAP_ZOOM,
+          duration: 1,
+        });
+      }
+    },
+    [claims]
+  );
+
+  // Render conquered zones + monarch person icons
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    zonesRef.current.forEach((z) => z.remove());
+    zonesRef.current = [];
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
+
+    conqueredLocations.forEach((location) => {
+      const claim = location.claim!;
+      const monarch = getMonarchColor(claim.user_id);
+      const profile = getProfileById(claim.user_id);
+      const placeName = getDisplayName(location);
+      const initial = profile
+        ? getUsernameInitial(profile.username)
+        : monarch.label.charAt(0).toUpperCase();
+
+      const zone = L.rectangle(venueBounds(location.latitude, location.longitude), {
+        color: monarch.stroke,
+        fillColor: monarch.fill,
+        fillOpacity: selectedProfileId === claim.user_id ? 0.65 : 0.45,
+        weight: selectedProfileId === claim.user_id ? 3 : 2,
+        opacity: 0.9,
+        className: "kingdom-zone",
+      })
+        .addTo(map)
+        .on("mouseover", () => {
+          zone.setStyle({ fillOpacity: 0.6, weight: 3 });
+        })
+        .on("mouseout", () => {
+          const highlighted = selectedProfileId === claim.user_id;
+          zone.setStyle({
+            fillOpacity: highlighted ? 0.65 : 0.45,
+            weight: highlighted ? 3 : 2,
+          });
+        })
+        .on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          openLocation(location);
+        });
+
+      zone.bindTooltip(
+        `<strong>${placeName}</strong><br/><span style="opacity:0.8">@${profile?.username ?? monarch.label}</span>`,
+        { direction: "top", className: "monarch-tooltip", sticky: true }
+      );
+
+      zonesRef.current.push(zone);
+
+      const marker = L.marker([location.latitude, location.longitude], {
+        icon: createPersonIcon(monarch.fill, monarch.stroke, initial),
+        zIndexOffset: 500,
+      })
+        .addTo(map)
+        .on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          openProfile(claim.user_id);
+        });
+
+      marker.bindTooltip(`@${profile?.username ?? monarch.label}`, {
+        direction: "top",
+        offset: [0, -20],
+        className: "monarch-tooltip",
+      });
+
+      markersRef.current.push(marker);
+    });
+  }, [conqueredLocations, openLocation, openProfile, selectedProfileId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (nearbyRef.current) {
+      nearbyRef.current.remove();
+      nearbyRef.current = null;
+    }
+
+    if (!nearbyUnexplored) return;
+
+    nearbyRef.current = L.rectangle(
+      venueBounds(nearbyUnexplored.latitude, nearbyUnexplored.longitude),
+      {
+        color: "#78716c",
+        fillColor: "#57534e",
+        fillOpacity: 0.12,
+        weight: 1.5,
+        opacity: 0.6,
+        dashArray: "6 4",
+        className: "uncharted-zone",
+      }
+    )
+      .addTo(map)
+      .on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        openLocation(nearbyUnexplored);
+      });
+
+    nearbyRef.current.bindTooltip("Unexplored", {
+      permanent: true,
+      direction: "center",
+      className: "uncharted-tooltip",
+    });
+  }, [nearbyUnexplored, openLocation]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !userPosition) return;
+
+    const youColor = getMonarchColor(CURRENT_USER_ID);
+    const youInitial = getUsernameInitial(
+      getProfileById(CURRENT_USER_ID)?.username ?? "you"
+    );
+
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setLatLng([userPosition.lat, userPosition.lng]);
+    } else {
+      userMarkerRef.current = L.marker([userPosition.lat, userPosition.lng], {
+        icon: createPersonIcon(youColor.fill, youColor.stroke, youInitial, 36),
+        zIndexOffset: 2000,
+      })
+        .addTo(map)
+        .on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          openProfile(CURRENT_USER_ID);
+        });
+
+      userMarkerRef.current.bindTooltip("You", {
+        direction: "top",
+        offset: [0, -22],
+        className: "monarch-tooltip",
+      });
+    }
+  }, [userPosition, openProfile]);
+
+  const canClaimLocation = useCallback(
+    (location: LocationWithClaim) => {
+      if (location.claim) return false;
+      if (!userPosition) return false;
+      return (
+        haversineDistanceMeters(
+          userPosition.lat,
+          userPosition.lng,
+          location.latitude,
+          location.longitude
+        ) <= CLAIM_RADIUS_METERS
+      );
+    },
+    [userPosition]
+  );
+
+  const handleClaimSuccess = (
+    placeName: string,
+    reviewText: string,
+    photoPreview: string
+  ) => {
+    if (!claimingLocation) return;
+
+    const newClaim: Claim = {
+      id: `claim-${Date.now()}`,
+      location_id: claimingLocation.id,
+      user_id: CURRENT_USER_ID,
+      place_name: placeName,
+      photo_url: photoPreview,
+      review_text: reviewText,
+      created_at: new Date().toISOString(),
+    };
+
+    setClaims((prev) => [...prev, newClaim]);
+    setClaimingLocation(null);
+    setNearbyUnexplored(null);
+    setSelectedLocation({
+      ...claimingLocation,
+      claim: newClaim,
+      isMonarch: true,
+    });
+  };
+
+  const conqueredCount = conqueredLocations.length;
+
+  return (
+    <div className="absolute inset-0">
+      <div ref={mapContainer} className="absolute inset-0 z-0" />
+
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000]">
+        <TabToggle activeTab={activeTab} onTabChange={setActiveTab} />
+      </div>
+
+      <div className="absolute top-3 left-3 z-[1000] px-3 py-1.5 rounded-full bg-surface-elevated/90 backdrop-blur-sm border border-gold/10 text-xs text-muted">
+        {activeTab === "community" ? "Global Kingdoms" : "Friends Circle"}
+        <span className="ml-1.5 text-foreground font-medium">
+          {conqueredCount} explored
+        </span>
+      </div>
+
+      <MonarchLegend
+        activeUserIds={activeMonarchIds}
+        selectedUserId={selectedProfileId}
+        onSelectProfile={openProfile}
+      />
+
+      {nearbyUnexplored &&
+        !selectedLocation &&
+        !claimingLocation &&
+        !selectedProfileId && (
+          <button
+            type="button"
+            onClick={() => openLocation(nearbyUnexplored)}
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-4 py-2.5 rounded-full bg-surface-elevated/95 backdrop-blur-md border border-dashed border-muted/40 text-sm shadow-xl animate-pulse hover:border-gold/40 transition-colors"
+          >
+            <span className="h-2 w-2 rounded-full bg-muted" />
+            Unexplored nearby — tap to explore
+          </button>
+        )}
+
+      {selectedProfile && (
+        <ProfilePanel
+          profile={selectedProfile}
+          claims={getClaimsForUser(selectedProfile.id, claims)}
+          locations={locationsWithClaims}
+          onClose={() => setSelectedProfileId(null)}
+          onSelectPlace={(loc) => {
+            flyToLocation(loc);
+            openLocation(loc);
+          }}
+          onViewAllOnMap={() => flyToUserLands(selectedProfile.id)}
+        />
+      )}
+
+      {selectedLocation && !selectedProfileId && (
+        <LocationPanel
+          location={selectedLocation}
+          canClaim={canClaimLocation(selectedLocation)}
+          onClaim={() => setClaimingLocation(selectedLocation)}
+          onClose={() => setSelectedLocation(null)}
+        />
+      )}
+
+      {claimingLocation && (
+        <ClaimCrownModal
+          location={claimingLocation}
+          onClose={() => setClaimingLocation(null)}
+          onSuccess={handleClaimSuccess}
+        />
+      )}
+    </div>
+  );
+}
