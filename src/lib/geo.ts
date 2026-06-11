@@ -39,3 +39,38 @@ export function venueBounds(
     [lat + halfHeight, lng + halfWidth],
   ];
 }
+
+/** Offset coordinates by meters (north / east). */
+export function offsetMeters(
+  lat: number,
+  lng: number,
+  metersNorth: number,
+  metersEast: number
+): { latitude: number; longitude: number } {
+  const latRad = (lat * Math.PI) / 180;
+  return {
+    latitude: lat + metersNorth / 111_320,
+    longitude: lng + metersEast / (111_320 * Math.cos(latRad)),
+  };
+}
+
+/** Generate unexplored spots near the user (~60–90m away). */
+export function spotsNearUser(
+  lat: number,
+  lng: number
+): { id: string; latitude: number; longitude: number }[] {
+  const offsets = [
+    { n: 75, e: 0 },
+    { n: -70, e: 45 },
+    { n: 30, e: -80 },
+    { n: -40, e: -60 },
+  ];
+  return offsets.map(({ n, e }, i) => {
+    const point = offsetMeters(lat, lng, n, e);
+    return {
+      id: `nearby-${i}`,
+      latitude: point.latitude,
+      longitude: point.longitude,
+    };
+  });
+}

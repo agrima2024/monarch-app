@@ -15,12 +15,14 @@ import { getDisplayName } from "@/lib/display";
 import {
   CLAIM_RADIUS_METERS,
   haversineDistanceMeters,
+  spotsNearUser,
   USER_MAP_ZOOM,
   venueBounds,
 } from "@/lib/geo";
 import { getMonarchColor } from "@/lib/monarch-colors";
-import type { Claim, LocationWithClaim, MapTab } from "@/lib/types";
+import type { Claim, Location, LocationWithClaim, MapTab } from "@/lib/types";
 import { ClaimCrownModal } from "./ClaimCrownModal";
+import { ClaimHereButton } from "./ClaimHereButton";
 import { LocationPanel } from "./LocationPanel";
 import { MonarchLegend } from "./MonarchLegend";
 import { ProfilePanel } from "./ProfilePanel";
@@ -78,6 +80,8 @@ function createPersonIcon(
   });
 }
 
+const CLAIM_HERE_ID = "claim-here";
+
 export function MapView() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -102,6 +106,30 @@ export function MapView() {
     lat: number;
     lng: number;
   } | null>(null);
+  const [localLocations, setLocalLocations] = useState<Location[]>([]);
+  const [pinnedHereSpot, setPinnedHereSpot] = useState<Location | null>(null);
+
+  const allLocations = useMemo(() => {
+    const base = [...DUMMY_LOCATIONS, ...localLocations];
+    const hereClaimed = claims.some((c) => c.location_id === CLAIM_HERE_ID);
+
+    if (pinnedHereSpot) {
+      return [...base, pinnedHereSpot];
+    }
+
+    if (userPosition && !hereClaimed) {
+      return [
+        ...base,
+        {
+          id: CLAIM_HERE_ID,
+          latitude: userPosition.lat,
+          longitude: userPosition.lng,
+        },
+      ];
+    }
+
+    return base;
+  }, [localLocations, userPosition, pinnedHereSpot, claims]);
 
   const monarchClaims = useMemo(
     () => resolveMonarchClaims(claims, activeTab, CURRENT_USER_ID),
@@ -114,7 +142,7 @@ export function MapView() {
       ...getFriendIds(CURRENT_USER_ID),
     ]);
 
-    return DUMMY_LOCATIONS.map((loc) => {
+    return allLocations.map((loc) => {
       const claim = monarchClaims.get(loc.id);
       const globalClaim = claims.find((c) => c.location_id === loc.id);
 
@@ -130,7 +158,7 @@ export function MapView() {
           }),
       };
     });
-  }, [monarchClaims, claims, activeTab]);
+  }, [monarchClaims, claims, activeTab, allLocations]);
 
   const conqueredLocations = useMemo(
     () => locationsWithClaims.filter((loc) => loc.claim),
@@ -165,6 +193,11 @@ export function MapView() {
       setUserPosition({ lat: SF_CENTER[0], lng: SF_CENTER[1] });
     }
   }, []);
+
+  useEffect(() => {
+    if (!userPosition || localLocations.length > 0) return;
+    setLocalLocations(spotsNearUser(userPosition.lat, userPosition.lng));
+  }, [userPosition, localLocations.length]);
 
   useEffect(() => {
     if (!userPosition) {
@@ -260,7 +293,7 @@ export function MapView() {
       const bounds = L.latLngBounds([]);
 
       for (const claim of userClaims) {
-        const loc = DUMMY_LOCATIONS.find((l) => l.id === claim.location_id);
+        const loc = allLocations.find((l) => l.id === claim.location_id);
         if (!loc) continue;
         const [[s, w], [n, e]] = venueBounds(loc.latitude, loc.longitude);
         bounds.extend([s, w]);
@@ -275,7 +308,7 @@ export function MapView() {
         });
       }
     },
-    [claims]
+    [claims, allLocations]
   );
 
   // Render conquered zones + monarch person icons
@@ -430,12 +463,34 @@ export function MapView() {
     [userPosition]
   );
 
+  const canClaimHere = useMemo(() => {
+    if (!userPosition) return false;
+    return !claims.some((c) => c.location_id === CLAIM_HERE_ID);
+  }, [userPosition, claims]);
+
+  const openClaimHere = useCallback(() => {
+    if (!userPosition) return;
+    openLocation({
+      id: CLAIM_HERE_ID,
+      latitude: userPosition.lat,
+      longitude: userPosition.lng,
+    });
+  }, [userPosition, openLocation]);
+
   const handleClaimSuccess = (
     placeName: string,
     reviewText: string,
     photoPreview: string
   ) => {
     if (!claimingLocation) return;
+
+    if (claimingLocation.id === CLAIM_HERE_ID) {
+      setPinnedHereSpot({
+        id: CLAIM_HERE_ID,
+        latitude: claimingLocation.latitude,
+        longitude: claimingLocation.longitude,
+      });
+    }
 
     const newClaim: Claim = {
       id: `claim-${Date.now()}`,
@@ -480,7 +535,16 @@ export function MapView() {
         onSelectProfile={openProfile}
       />
 
+      {canClaimHere &&
+        !selectedLocation &&
+        !claimingLocation &&
+        !selectedProfileId && (
+          <ClaimHereButton onClaim={openClaimHere} />
+        )}
+
       {nearbyUnexplored &&
+        nearbyUnexplored.id !== CLAIM_HERE_ID &&
+        !canClaimHere &&
         !selectedLocation &&
         !claimingLocation &&
         !selectedProfileId && (
