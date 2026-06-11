@@ -37,8 +37,15 @@ export function ClaimCrownModal({
       const file = e.target.files?.[0];
       if (!file) return;
       setPhotoFile(file);
-      setPhotoPreview(URL.createObjectURL(file));
       setGuardMessage(null);
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          setPhotoPreview(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
     },
     []
   );
@@ -78,7 +85,7 @@ export function ClaimCrownModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[6000] flex items-end sm:items-center justify-center pointer-events-auto">
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
@@ -137,6 +144,9 @@ export function ClaimCrownModal({
               type="file"
               accept="image/*"
               capture="environment"
+              onClick={(e) => {
+                (e.target as HTMLInputElement).value = "";
+              }}
               onChange={handlePhotoChange}
               className="hidden"
             />
@@ -181,7 +191,7 @@ export function ClaimCrownModal({
                 setReviewText(e.target.value);
                 setGuardMessage(null);
               }}
-              placeholder="Share what you discovered here — the Royal Guard expects at least 1–2 helpful sentences..."
+              placeholder="Share what you discovered — e.g. Great coffee and cozy patio in the morning."
               rows={4}
               className="w-full rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40 resize-none"
             />

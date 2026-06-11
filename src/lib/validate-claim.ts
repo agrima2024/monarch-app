@@ -38,23 +38,8 @@ export function validateClaim(
     };
   }
 
-  if (photoFile.size < 5000) {
-    return {
-      approved: false,
-      image_passed: false,
-      text_passed: true,
-      rejection_reason: "Image too small or low quality",
-      royal_guard_message:
-        "The Royal Guard suspects trickery — submit a clear live photo of the place!",
-    };
-  }
-
   const trimmedName = placeName.trim();
-  const sentences = reviewText
-    .split(/[.!?]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const wordCount = reviewText.trim().split(/\s+/).length;
+  const wordCount = reviewText.trim().split(/\s+/).filter(Boolean).length;
   const profanityPattern = /\b(damn|hell|shit|fuck|ass|bitch|crap)\b/i;
 
   if (trimmedName.length < 2) {
@@ -68,13 +53,13 @@ export function validateClaim(
     };
   }
 
-  if (wordCount < 8 || sentences.length < 1) {
+  if (wordCount < 3) {
     return {
       approved: false,
       image_passed: true,
       text_passed: false,
       rejection_reason: "Review too brief",
-      royal_guard_message: `The review is too brief for a Monarch! Share genuine insight about "${trimmedName}".`,
+      royal_guard_message: `Write at least 3 words about "${trimmedName}" — e.g. "Great coffee and cozy patio."`,
     };
   }
 

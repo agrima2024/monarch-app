@@ -18,6 +18,9 @@ export function haversineDistanceMeters(
 /** How close you must be to discover / claim a spot. */
 export const CLAIM_RADIUS_METERS = 150;
 
+/** Minimum distance before treating a new "claim here" as a different spot. */
+export const CLAIM_HERE_MIN_DISTANCE_METERS = 40;
+
 /** Default zoom when centering on the user's location. */
 export const USER_MAP_ZOOM = 17;
 

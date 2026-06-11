@@ -12,7 +12,9 @@ import {
   getUsernameInitial,
 } from "@/lib/dummy-data";
 import { getDisplayName } from "@/lib/display";
+import { loadStoredClaims, loadUserLocations, saveStoredClaims, saveUserLocations } from "@/lib/claim-storage";
 import {
+  CLAIM_HERE_MIN_DISTANCE_METERS,
   CLAIM_RADIUS_METERS,
   haversineDistanceMeters,
   spotsNearUser,
@@ -80,7 +82,14 @@ function createPersonIcon(
   });
 }
 
-const CLAIM_HERE_ID = "claim-here";
+const CLAIM_HERE_PREFIX = "user-spot-";
+
+function findLocationById(
+  locations: Location[],
+  locationId: string
+): Location | undefined {
+  return locations.find((l) => l.id === locationId);
+}
 
 export function MapView() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -105,31 +114,32 @@ export function MapView() {
   const [userPosition, setUserPosition] = useState<{
     lat: number;
     lng: number;
-  } | null>(null);
+  }>({ lat: SF_CENTER[0], lng: SF_CENTER[1] });
+  const [geoStatus, setGeoStatus] = useState<"pending" | "ok" | "denied">(
+    "pending"
+  );
   const [localLocations, setLocalLocations] = useState<Location[]>([]);
-  const [pinnedHereSpot, setPinnedHereSpot] = useState<Location | null>(null);
+  const [userClaimedLocations, setUserClaimedLocations] = useState<Location[]>(
+    []
+  );
+  const [claimToast, setClaimToast] = useState<string | null>(null);
 
   const allLocations = useMemo(() => {
-    const base = [...DUMMY_LOCATIONS, ...localLocations];
-    const hereClaimed = claims.some((c) => c.location_id === CLAIM_HERE_ID);
+    const seen = new Set<string>();
+    const merged: Location[] = [];
 
-    if (pinnedHereSpot) {
-      return [...base, pinnedHereSpot];
+    for (const loc of [
+      ...DUMMY_LOCATIONS,
+      ...localLocations,
+      ...userClaimedLocations,
+    ]) {
+      if (seen.has(loc.id)) continue;
+      seen.add(loc.id);
+      merged.push(loc);
     }
 
-    if (userPosition && !hereClaimed) {
-      return [
-        ...base,
-        {
-          id: CLAIM_HERE_ID,
-          latitude: userPosition.lat,
-          longitude: userPosition.lng,
-        },
-      ];
-    }
-
-    return base;
-  }, [localLocations, userPosition, pinnedHereSpot, claims]);
+    return merged;
+  }, [localLocations, userClaimedLocations]);
 
   const monarchClaims = useMemo(
     () => resolveMonarchClaims(claims, activeTab, CURRENT_USER_ID),
@@ -175,36 +185,69 @@ export function MapView() {
     [conqueredLocations]
   );
 
+  useEffect(() => {
+    const stored = loadStoredClaims();
+    const storedLocations = loadUserLocations();
+
+    // Drop legacy single-use "claim-here" entries that lost their coordinates.
+    const migratedClaims = stored.filter((c) => c.location_id !== "claim-here");
+    const migratedLocations = storedLocations.filter(
+      (l) => l.id !== "claim-here"
+    );
+    if (
+      migratedClaims.length !== stored.length ||
+      migratedLocations.length !== storedLocations.length
+    ) {
+      saveStoredClaims(migratedClaims);
+      saveUserLocations(migratedLocations);
+    }
+
+    if (migratedLocations.length > 0) {
+      setUserClaimedLocations(migratedLocations);
+    }
+    if (migratedClaims.length === 0) return;
+    setClaims((prev) => {
+      const ids = new Set(prev.map((c) => c.id));
+      return [...prev, ...migratedClaims.filter((c) => !ids.has(c.id))];
+    });
+  }, []);
+
   const selectedProfile = selectedProfileId
     ? getProfileById(selectedProfileId)
     : undefined;
 
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          setUserPosition({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          }),
-        () => setUserPosition({ lat: SF_CENTER[0], lng: SF_CENTER[1] })
-      );
-    } else {
-      setUserPosition({ lat: SF_CENTER[0], lng: SF_CENTER[1] });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!userPosition || localLocations.length > 0) return;
-    setLocalLocations(spotsNearUser(userPosition.lat, userPosition.lng));
-  }, [userPosition, localLocations.length]);
-
-  useEffect(() => {
-    if (!userPosition) {
-      setNearbyUnexplored(null);
+    if (!navigator.geolocation) {
+      setGeoStatus("denied");
       return;
     }
 
+    const fallback = setTimeout(() => setGeoStatus("denied"), 8000);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(fallback);
+        setUserPosition({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+        setGeoStatus("ok");
+      },
+      () => {
+        clearTimeout(fallback);
+        setGeoStatus("denied");
+      },
+      { enableHighAccuracy: false, timeout: 7000, maximumAge: 120000 }
+    );
+
+    return () => clearTimeout(fallback);
+  }, []);
+
+  useEffect(() => {
+    setLocalLocations(spotsNearUser(userPosition.lat, userPosition.lng));
+  }, [userPosition.lat, userPosition.lng]);
+
+  useEffect(() => {
     let closest: LocationWithClaim | null = null;
     let closestDist = Infinity;
 
@@ -419,7 +462,7 @@ export function MapView() {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !userPosition) return;
+    if (!map) return;
 
     const youColor = getMonarchColor(CURRENT_USER_ID);
     const youInitial = getUsernameInitial(
@@ -450,7 +493,12 @@ export function MapView() {
   const canClaimLocation = useCallback(
     (location: LocationWithClaim) => {
       if (location.claim) return false;
-      if (!userPosition) return false;
+      if (
+        location.id.startsWith(CLAIM_HERE_PREFIX) ||
+        location.id.startsWith("nearby-")
+      ) {
+        return true;
+      }
       return (
         haversineDistanceMeters(
           userPosition.lat,
@@ -464,18 +512,33 @@ export function MapView() {
   );
 
   const canClaimHere = useMemo(() => {
-    if (!userPosition) return false;
-    return !claims.some((c) => c.location_id === CLAIM_HERE_ID);
-  }, [userPosition, claims]);
+    const myClaims = claims.filter((c) => c.user_id === CURRENT_USER_ID);
+    for (const claim of myClaims) {
+      const loc = findLocationById(allLocations, claim.location_id);
+      if (!loc) continue;
+      if (
+        haversineDistanceMeters(
+          userPosition.lat,
+          userPosition.lng,
+          loc.latitude,
+          loc.longitude
+        ) <= CLAIM_HERE_MIN_DISTANCE_METERS
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }, [claims, userPosition, allLocations]);
 
-  const openClaimHere = useCallback(() => {
-    if (!userPosition) return;
-    openLocation({
-      id: CLAIM_HERE_ID,
+  const startClaimHere = useCallback(() => {
+    setSelectedProfileId(null);
+    setSelectedLocation(null);
+    setClaimingLocation({
+      id: `${CLAIM_HERE_PREFIX}${Date.now()}`,
       latitude: userPosition.lat,
       longitude: userPosition.lng,
     });
-  }, [userPosition, openLocation]);
+  }, [userPosition]);
 
   const handleClaimSuccess = (
     placeName: string,
@@ -484,13 +547,17 @@ export function MapView() {
   ) => {
     if (!claimingLocation) return;
 
-    if (claimingLocation.id === CLAIM_HERE_ID) {
-      setPinnedHereSpot({
-        id: CLAIM_HERE_ID,
-        latitude: claimingLocation.latitude,
-        longitude: claimingLocation.longitude,
-      });
-    }
+    const claimedSpot: Location = {
+      id: claimingLocation.id,
+      latitude: claimingLocation.latitude,
+      longitude: claimingLocation.longitude,
+    };
+
+    setUserClaimedLocations((prev) => {
+      const next = [...prev.filter((l) => l.id !== claimedSpot.id), claimedSpot];
+      saveUserLocations(next);
+      return next;
+    });
 
     const newClaim: Claim = {
       id: `claim-${Date.now()}`,
@@ -502,7 +569,11 @@ export function MapView() {
       created_at: new Date().toISOString(),
     };
 
-    setClaims((prev) => [...prev, newClaim]);
+    setClaims((prev) => {
+      const next = [...prev, newClaim];
+      saveStoredClaims(next);
+      return next;
+    });
     setClaimingLocation(null);
     setNearbyUnexplored(null);
     setSelectedLocation({
@@ -510,6 +581,17 @@ export function MapView() {
       claim: newClaim,
       isMonarch: true,
     });
+    setClaimToast(`Crowned at ${placeName}!`);
+    window.setTimeout(() => setClaimToast(null), 4000);
+
+    const map = mapRef.current;
+    if (map) {
+      map.flyTo(
+        [claimingLocation.latitude, claimingLocation.longitude],
+        USER_MAP_ZOOM,
+        { duration: 0.8 }
+      );
+    }
   };
 
   const conqueredCount = conqueredLocations.length;
@@ -518,67 +600,64 @@ export function MapView() {
     <div className="absolute inset-0">
       <div ref={mapContainer} className="absolute inset-0 z-0" />
 
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000]">
-        <TabToggle activeTab={activeTab} onTabChange={setActiveTab} />
-      </div>
-
-      <div className="absolute top-3 left-3 z-[1000] px-3 py-1.5 rounded-full bg-surface-elevated/90 backdrop-blur-sm border border-gold/10 text-xs text-muted">
-        {activeTab === "community" ? "Global Kingdoms" : "Friends Circle"}
-        <span className="ml-1.5 text-foreground font-medium">
-          {conqueredCount} explored
-        </span>
-      </div>
-
-      <MonarchLegend
-        activeUserIds={activeMonarchIds}
-        selectedUserId={selectedProfileId}
-        onSelectProfile={openProfile}
-      />
-
-      {canClaimHere &&
-        !selectedLocation &&
-        !claimingLocation &&
-        !selectedProfileId && (
-          <ClaimHereButton onClaim={openClaimHere} />
+      <div className="absolute inset-0 z-[1000] pointer-events-none">
+        {geoStatus === "pending" && (
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-surface-elevated/90 text-[10px] text-muted border border-gold/10">
+            Finding your location…
+          </div>
         )}
 
-      {nearbyUnexplored &&
-        nearbyUnexplored.id !== CLAIM_HERE_ID &&
-        !canClaimHere &&
-        !selectedLocation &&
-        !claimingLocation &&
-        !selectedProfileId && (
-          <button
-            type="button"
-            onClick={() => openLocation(nearbyUnexplored)}
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-4 py-2.5 rounded-full bg-surface-elevated/95 backdrop-blur-md border border-dashed border-muted/40 text-sm shadow-xl animate-pulse hover:border-gold/40 transition-colors"
-          >
-            <span className="h-2 w-2 rounded-full bg-muted" />
-            Unexplored nearby — tap to explore
-          </button>
+        {claimToast && (
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gold/90 text-background text-xs font-semibold shadow-lg pointer-events-none">
+            {claimToast}
+          </div>
         )}
 
-      {selectedProfile && (
-        <ProfilePanel
-          profile={selectedProfile}
-          claims={getClaimsForUser(selectedProfile.id, claims)}
-          locations={locationsWithClaims}
-          onClose={() => setSelectedProfileId(null)}
-          onSelectPlace={(loc) => {
-            flyToLocation(loc);
-            openLocation(loc);
-          }}
-          onViewAllOnMap={() => flyToUserLands(selectedProfile.id)}
-        />
-      )}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto">
+          <TabToggle activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
 
-      {selectedLocation && !selectedProfileId && (
-        <LocationPanel
-          location={selectedLocation}
-          canClaim={canClaimLocation(selectedLocation)}
-          onClaim={() => setClaimingLocation(selectedLocation)}
-          onClose={() => setSelectedLocation(null)}
-        />
+        <div className="absolute top-3 left-3 pointer-events-auto px-3 py-1.5 rounded-full bg-surface-elevated/90 backdrop-blur-sm border border-gold/10 text-xs text-muted">
+          {activeTab === "community" ? "Global Kingdoms" : "Friends Circle"}
+          <span className="ml-1.5 text-foreground font-medium">
+            {conqueredCount} explored
+          </span>
+        </div>
+
+        <div className="pointer-events-auto">
+          <MonarchLegend
+            activeUserIds={activeMonarchIds}
+            selectedUserId={selectedProfileId}
+            onSelectProfile={openProfile}
+          />
+        </div>
+
+        {selectedProfile && (
+          <ProfilePanel
+            profile={selectedProfile}
+            claims={getClaimsForUser(selectedProfile.id, claims)}
+            locations={locationsWithClaims}
+            onClose={() => setSelectedProfileId(null)}
+            onSelectPlace={(loc) => {
+              flyToLocation(loc);
+              openLocation(loc);
+            }}
+            onViewAllOnMap={() => flyToUserLands(selectedProfile.id)}
+          />
+        )}
+
+        {selectedLocation && !selectedProfileId && (
+          <LocationPanel
+            location={selectedLocation}
+            canClaim={canClaimLocation(selectedLocation)}
+            onClaim={() => setClaimingLocation(selectedLocation)}
+            onClose={() => setSelectedLocation(null)}
+          />
+        )}
+      </div>
+
+      {canClaimHere && !claimingLocation && (
+        <ClaimHereButton onClaim={startClaimHere} />
       )}
 
       {claimingLocation && (

@@ -33,7 +33,7 @@ export function LocationPanel({
   const monarchColor = claim ? getMonarchColor(claim.user_id) : null;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-[1200] mx-3 mb-3 pointer-events-auto">
+    <div className="fixed bottom-0 left-0 right-0 z-[5500] mx-3 mb-3 pointer-events-auto">
       <div
         className="bg-surface-elevated/95 backdrop-blur-md rounded-2xl border shadow-2xl overflow-hidden"
         style={
