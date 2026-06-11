@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:public": "bash scripts/start-public.sh",
     "lint": "next lint"
   },
   "dependencies": {

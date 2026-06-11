@@ -2,94 +2,73 @@
 
 Gamified real-world exploration. Claim Points of Interest as your **Kingdom** by submitting an AI-verified live photo and review.
 
-## Features (Phase 1)
+## Live demo
+
+**Public URL:** https://missile-ent-longitude-andrews.trycloudflare.com
+
+Anyone with the link can open the app in a browser (phone or desktop). Allow location access for the best experience.
+
+> This demo runs from a Cloudflare tunnel. For a permanent 24/7 URL, deploy to Vercel or Render (see below).
+
+## Features
 
 - **Dual-tab map** — Community (global monarchs) and Friends (inner-circle monarchs)
+- **Venue-sized kingdom zones** — colored footprints per monarch
 - **Claim Crown flow** — Live photo + review with Gemini AI validation
-- **Supabase schema** — Profiles, locations, claims, friendships
+- **Monarch profiles** — tap a person icon to see conquered land
 - **Mobile-first PWA** — Responsive layout with manifest
 
-## Quick Start
-
-### 1. Install dependencies
+## Quick Start (local)
 
 ```bash
 npm install
-```
-
-### 2. Configure environment
-
-Copy `.env.example` to `.env.local` and fill in your keys:
-
-```bash
-cp .env.example .env.local
-```
-
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | [Mapbox access token](https://account.mapbox.com/) |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `GEMINI_API_KEY` | [Google Gemini API key](https://aistudio.google.com/apikey) |
-
-> Without API keys, the app runs in demo mode with dummy data and fallback validation.
-
-### 3. Set up Supabase (optional for demo)
-
-Run the migration in your Supabase SQL editor:
-
-```
-supabase/migrations/001_initial_schema.sql
-```
-
-### 4. Run the dev server
-
-```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Project Structure
+### Share on your network (temporary public link)
 
-```
-src/
-├── app/
-│   ├── api/validate-claim/   # Gemini AI gatekeeper
-│   ├── layout.tsx
-│   ├── page.tsx
-│   └── globals.css
-├── components/
-│   ├── MapView.tsx           # Mapbox map + markers
-│   ├── TabToggle.tsx         # Community / Friends switch
-│   ├── ClaimCrownModal.tsx   # Photo + review submission
-│   ├── LocationPanel.tsx     # POI detail bottom sheet
-│   └── Header.tsx
-└── lib/
-    ├── types.ts
-    ├── dummy-data.ts         # Demo POIs & claims
-    ├── geo.ts                # Distance calculations
-    └── supabase/             # Client helpers
+```bash
+npm run start:public
 ```
 
-## How It Works
+This builds the app, starts production mode, and prints a public `trycloudflare.com` URL you can share.
 
-### Community vs Friends
+## Deploy permanently (recommended)
 
-- **Community tab:** One global Monarch per POI (first claim wins worldwide)
-- **Friends tab:** Among you and people you follow, whoever claimed first is crowned
+Code is on GitHub: https://github.com/agrima2024/monarch-app
 
-### Claim Flow
+### Option A — Vercel (easiest for Next.js)
 
-1. Select an unclaimed POI within 150m of your location
-2. Capture a live photo and write a review
-3. Gemini validates image quality and review substance
-4. On approval, the claim is saved; on rejection, the Royal Guard explains why
+1. Go to [vercel.com/new/clone?repository-url=https://github.com/agrima2024/monarch-app](https://vercel.com/new/clone?repository-url=https://github.com/agrima2024/monarch-app)
+2. Click **Deploy** (free tier)
+3. Share your `*.vercel.app` URL
+
+Optional env vars: `GEMINI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+### Option B — Render
+
+1. Go to [render.com](https://render.com) → **New** → **Blueprint**
+2. Connect the `agrima2024/monarch-app` repo (uses `render.yaml`)
+3. Deploy and share your `*.onrender.com` URL
+
+## Environment variables
+
+Copy `.env.example` to `.env.local` for local development:
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `GEMINI_API_KEY` | [Google Gemini API key](https://aistudio.google.com/apikey) |
+
+Without API keys, the app runs in demo mode with dummy data and fallback validation.
 
 ## Tech Stack
 
 - Next.js 15 (App Router) + TypeScript
 - Tailwind CSS 4
-- Mapbox GL JS
-- Supabase (PostgreSQL, Auth, Storage)
+- Leaflet + OpenStreetMap
+- Supabase (PostgreSQL, Auth, Storage) — schema included
 - Google Gemini API (structured outputs)
