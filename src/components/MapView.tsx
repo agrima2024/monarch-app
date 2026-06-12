@@ -8,10 +8,11 @@ import {
 } from "@/lib/dummy-data";
 import { getDisplayName } from "@/lib/display";
 import { loadStoredClaims, loadUserLocations, saveStoredClaims, saveUserLocations } from "@/lib/claim-storage";
-import { loadGlobalClaims, publishClaim } from "@/lib/global-claims";
+import { loadGlobalClaims, publishClaim, removeGlobalClaim } from "@/lib/global-claims";
 import {
   loadGlobalLocations,
   publishLocation,
+  removeGlobalLocation,
 } from "@/lib/global-locations";
 import {
   CLAIM_HERE_MIN_DISTANCE_METERS,
@@ -630,6 +631,38 @@ export function MapView() {
     }
   };
 
+  const handleDeleteClaim = useCallback(
+    (claimId: string) => {
+      const claim = claims.find((item) => item.id === claimId);
+      if (!claim || claim.user_id !== currentUserId) return;
+
+      const locationId = claim.location_id;
+
+      setClaims((prev) => {
+        const next = prev.filter((item) => item.id !== claimId);
+        saveStoredClaims(next, currentUserId);
+        removeGlobalClaim(claimId);
+        return next;
+      });
+
+      setUserClaimedLocations((prev) => {
+        const next = prev.filter((loc) => loc.id !== locationId);
+        saveUserLocations(next, currentUserId);
+        return next;
+      });
+      removeGlobalLocation(locationId);
+      setSharedLocations((prev) => prev.filter((loc) => loc.id !== locationId));
+
+      if (selectedLocation?.id === locationId) {
+        setSelectedLocation(null);
+      }
+
+      setClaimToast(`Relinquished ${claim.place_name}`);
+      window.setTimeout(() => setClaimToast(null), 4000);
+    },
+    [claims, currentUserId, selectedLocation?.id]
+  );
+
   const conqueredCount = conqueredLocations.length;
 
   return (
@@ -679,6 +712,7 @@ export function MapView() {
               openLocation(loc);
             }}
             onViewAllOnMap={() => flyToUserLands(selectedProfile.id)}
+            onDeleteClaim={handleDeleteClaim}
           />
         )}
 
@@ -686,7 +720,16 @@ export function MapView() {
           <LocationPanel
             location={selectedLocation}
             canClaim={canClaimLocation(selectedLocation)}
+            isOwnClaim={selectedLocation.claim?.user_id === currentUserId}
             onClaim={() => setClaimingLocation(selectedLocation)}
+            onDeleteClaim={() => {
+              const claimId = selectedLocation.claim?.id;
+              if (claimId) handleDeleteClaim(claimId);
+            }}
+            onViewProfile={(userId) => {
+              setSelectedLocation(null);
+              openProfile(userId);
+            }}
             onClose={() => setSelectedLocation(null)}
           />
         )}

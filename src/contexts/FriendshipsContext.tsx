@@ -16,6 +16,7 @@ import {
   getIncomingRequests,
   getOutgoingRequests,
   sendFriendRequest,
+  sendFriendRequestToUser,
 } from "@/lib/friendships";
 import { getUserProfile } from "@/lib/user-registry";
 
@@ -25,6 +26,7 @@ interface FriendshipsContextValue {
   outgoing: Friendship[];
   refresh: () => void;
   requestFriend: (username: string) => Promise<string | null>;
+  requestFriendById: (userId: string) => Promise<string | null>;
   acceptRequest: (friendshipId: string) => Promise<string | null>;
   declineRequest: (friendshipId: string) => Promise<string | null>;
 }
@@ -58,6 +60,16 @@ export function FriendshipsProvider({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const requestFriendById = useCallback(
+    async (targetUserId: string) => {
+      if (!userId) return "Sign in to add friends.";
+      const result = sendFriendRequestToUser(userId, targetUserId);
+      refresh();
+      return "error" in result ? result.error : null;
+    },
+    [userId, refresh]
+  );
 
   const requestFriend = useCallback(
     async (username: string) => {
@@ -96,6 +108,7 @@ export function FriendshipsProvider({
       outgoing,
       refresh,
       requestFriend,
+      requestFriendById,
       acceptRequest,
       declineRequest,
     }),
@@ -105,6 +118,7 @@ export function FriendshipsProvider({
       outgoing,
       refresh,
       requestFriend,
+      requestFriendById,
       acceptRequest,
       declineRequest,
     ]

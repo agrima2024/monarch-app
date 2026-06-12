@@ -67,11 +67,18 @@ export function sendFriendRequest(
     return { error: "No explorer found with that username." };
   }
 
-  if (target.id === fromUserId) {
+  return sendFriendRequestToUser(fromUserId, target.id);
+}
+
+export function sendFriendRequestToUser(
+  fromUserId: string,
+  toUserId: string
+): { friendship: Friendship } | { error: string } {
+  if (toUserId === fromUserId) {
     return { error: "You cannot friend yourself." };
   }
 
-  const existing = findBetween(fromUserId, target.id);
+  const existing = findBetween(fromUserId, toUserId);
   if (existing?.status === "accepted") {
     return { error: "You are already friends." };
   }
@@ -81,14 +88,14 @@ export function sendFriendRequest(
       return { error: "Friend request already sent." };
     }
     return {
-      error: "They already sent you a request — check your incoming requests.",
+      error: "They already sent you a request — accept it below.",
     };
   }
 
   const friendship: Friendship = {
     id: `friend-${crypto.randomUUID()}`,
     user_id: fromUserId,
-    friend_id: target.id,
+    friend_id: toUserId,
     status: "pending",
   };
 

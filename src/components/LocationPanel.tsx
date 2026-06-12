@@ -5,6 +5,7 @@ import {
   Crown,
   MapPin,
   Star,
+  Trash2,
   User,
   X,
 } from "lucide-react";
@@ -16,14 +17,20 @@ import type { LocationWithClaim } from "@/lib/types";
 interface LocationPanelProps {
   location: LocationWithClaim;
   canClaim: boolean;
+  isOwnClaim: boolean;
   onClaim: () => void;
+  onDeleteClaim: () => void;
+  onViewProfile?: (userId: string) => void;
   onClose: () => void;
 }
 
 export function LocationPanel({
   location,
   canClaim,
+  isOwnClaim,
   onClaim,
+  onDeleteClaim,
+  onViewProfile,
   onClose,
 }: LocationPanelProps) {
   const claim = location.claim;
@@ -91,8 +98,11 @@ export function LocationPanel({
 
         {claim && monarch ? (
           <div className="px-4 pb-4 space-y-3">
-            <div
-              className="flex items-center gap-2 p-3 rounded-xl border"
+            <button
+              type="button"
+              onClick={() => claim && onViewProfile?.(claim.user_id)}
+              disabled={!onViewProfile}
+              className="flex items-center gap-2 p-3 rounded-xl border w-full text-left transition-colors hover:opacity-90 disabled:cursor-default"
               style={{
                 backgroundColor: `${monarchColor!.fill}18`,
                 borderColor: `${monarchColor!.fill}44`,
@@ -113,7 +123,7 @@ export function LocationPanel({
                   @{monarch.username}
                 </p>
               </div>
-            </div>
+            </button>
             <div className="p-3 rounded-xl bg-surface border border-gold/10">
               <div className="flex items-center gap-1 mb-1.5">
                 <Star className="h-3.5 w-3.5 text-gold" />
@@ -121,6 +131,16 @@ export function LocationPanel({
               </div>
               <p className="text-sm leading-relaxed">{claim.review_text}</p>
             </div>
+            {isOwnClaim && (
+              <button
+                type="button"
+                onClick={onDeleteClaim}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-200 text-sm font-medium hover:bg-red-950/60 transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+                Relinquish this land
+              </button>
+            )}
           </div>
         ) : (
           <div className="px-4 pb-4">

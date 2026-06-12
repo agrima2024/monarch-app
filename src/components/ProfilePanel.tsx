@@ -1,8 +1,20 @@
 "use client";
 
-import { Crown, MapPin, User, X } from "lucide-react";
-import { getUsernameInitial } from "@/lib/user-registry";
+import {
+  Check,
+  Crown,
+  Loader2,
+  MapPin,
+  Trash2,
+  User,
+  UserPlus,
+  X,
+} from "lucide-react";
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useFriendships } from "@/contexts/FriendshipsContext";
 import { getMonarchColor } from "@/lib/monarch-colors";
+import { getUsernameInitial } from "@/lib/user-registry";
 import type { Claim, LocationWithClaim, Profile } from "@/lib/types";
 
 interface ProfilePanelProps {
@@ -12,6 +24,7 @@ interface ProfilePanelProps {
   onClose: () => void;
   onSelectPlace: (location: LocationWithClaim) => void;
   onViewAllOnMap: () => void;
+  onDeleteClaim: (claimId: string) => void;
 }
 
 export function ProfilePanel({
@@ -21,9 +34,33 @@ export function ProfilePanel({
   onClose,
   onSelectPlace,
   onViewAllOnMap,
+  onDeleteClaim,
 }: ProfilePanelProps) {
+  const { user } = useAuth();
+  const {
+    friendIds,
+    incoming,
+    outgoing,
+    requestFriendById,
+    acceptRequest,
+    declineRequest,
+  } = useFriendships();
+  const [friendActionError, setFriendActionError] = useState<string | null>(
+    null
+  );
+  const [friendActionInfo, setFriendActionInfo] = useState<string | null>(null);
+  const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
+
   const color = getMonarchColor(profile.id);
   const initial = getUsernameInitial(profile.username);
+  const isOwnProfile = user?.id === profile.id;
+  const isFriend = friendIds.includes(profile.id);
+  const incomingRequest = incoming.find(
+    (friendship) => friendship.user_id === profile.id
+  );
+  const outgoingRequest = outgoing.find(
+    (friendship) => friendship.friend_id === profile.id
+  );
 
   const conqueredPlaces = claims
     .map((claim) => {
@@ -31,6 +68,37 @@ export function ProfilePanel({
       return location ? { claim, location } : null;
     })
     .filter(Boolean) as { claim: Claim; location: LocationWithClaim }[];
+
+  const handleRequestFriend = async () => {
+    setFriendActionError(null);
+    setFriendActionInfo(null);
+    setIsFriendActionLoading(true);
+    const message = await requestFriendById(profile.id);
+    if (message) {
+      setFriendActionError(message);
+    } else {
+      setFriendActionInfo(`Friend request sent to @${profile.username}.`);
+    }
+    setIsFriendActionLoading(false);
+  };
+
+  const handleAccept = async () => {
+    if (!incomingRequest) return;
+    setFriendActionError(null);
+    setIsFriendActionLoading(true);
+    const message = await acceptRequest(incomingRequest.id);
+    if (message) setFriendActionError(message);
+    setIsFriendActionLoading(false);
+  };
+
+  const handleDecline = async () => {
+    if (!incomingRequest) return;
+    setFriendActionError(null);
+    setIsFriendActionLoading(true);
+    const message = await declineRequest(incomingRequest.id);
+    if (message) setFriendActionError(message);
+    setIsFriendActionLoading(false);
+  };
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-[1000] mx-3 mb-3 max-h-[70vh]">
@@ -78,6 +146,68 @@ export function ProfilePanel({
           </button>
         </div>
 
+        {!isOwnProfile && (
+          <div className="px-4 pb-3 shrink-0 space-y-2">
+            {isFriend ? (
+              <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-sm text-emerald-200">
+                <Check className="h-4 w-4" />
+                Friends
+              </div>
+            ) : incomingRequest ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleAccept}
+                  disabled={isFriendActionLoading}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-900/40 text-emerald-200 text-sm font-medium hover:bg-emerald-900/60 disabled:opacity-50"
+                >
+                  {isFriendActionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  Accept friend
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDecline}
+                  disabled={isFriendActionLoading}
+                  className="px-4 py-2.5 rounded-xl bg-red-950/40 text-red-300 hover:bg-red-950/60 disabled:opacity-50"
+                  aria-label="Decline"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : outgoingRequest ? (
+              <div className="py-2.5 rounded-xl bg-surface border border-gold/10 text-sm text-muted text-center">
+                Friend request sent — waiting for @
+                {profile.username} to accept
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRequestFriend}
+                disabled={isFriendActionLoading}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-sm font-medium hover:bg-gold/25 disabled:opacity-50"
+              >
+                {isFriendActionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <UserPlus className="h-4 w-4" />
+                )}
+                Add friend
+              </button>
+            )}
+
+            {friendActionError && (
+              <p className="text-xs text-red-300">{friendActionError}</p>
+            )}
+            {friendActionInfo && (
+              <p className="text-xs text-emerald-200">{friendActionInfo}</p>
+            )}
+          </div>
+        )}
+
         {conqueredPlaces.length > 0 ? (
           <>
             <div className="px-4 pb-2 shrink-0">
@@ -97,11 +227,11 @@ export function ProfilePanel({
 
             <ul className="overflow-y-auto px-4 pb-4 space-y-2">
               {conqueredPlaces.map(({ claim, location }) => (
-                <li key={claim.id}>
+                <li key={claim.id} className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => onSelectPlace(location)}
-                    className="w-full text-left p-3 rounded-xl bg-surface border border-gold/10 hover:border-gold/30 transition-colors"
+                    className="flex-1 text-left p-3 rounded-xl bg-surface border border-gold/10 hover:border-gold/30 transition-colors min-w-0"
                   >
                     <div className="flex items-start gap-2">
                       <MapPin
@@ -120,6 +250,16 @@ export function ProfilePanel({
                       />
                     </div>
                   </button>
+                  {isOwnProfile && (
+                    <button
+                      type="button"
+                      onClick={() => onDeleteClaim(claim.id)}
+                      className="shrink-0 px-3 rounded-xl bg-red-950/30 border border-red-500/20 text-red-300 hover:bg-red-950/50 transition-colors"
+                      aria-label={`Delete claim at ${claim.place_name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

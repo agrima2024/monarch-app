@@ -22,3 +22,9 @@ export function publishLocation(location: Location): void {
   ];
   localStorage.setItem(GLOBAL_LOCATIONS_KEY, JSON.stringify(next));
 }
+
+export function removeGlobalLocation(locationId: string): void {
+  if (typeof window === "undefined") return;
+  const next = loadGlobalLocations().filter((item) => item.id !== locationId);
+  localStorage.setItem(GLOBAL_LOCATIONS_KEY, JSON.stringify(next));
+}
