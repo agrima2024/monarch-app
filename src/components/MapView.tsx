@@ -7,7 +7,13 @@ import {
   getUsernameInitial,
 } from "@/lib/dummy-data";
 import { getDisplayName } from "@/lib/display";
-import { loadStoredClaims, loadUserLocations, saveStoredClaims, saveUserLocations } from "@/lib/claim-storage";
+import { DATA_CHANGED_EVENT, notifyDataChanged } from "@/lib/app-events";
+import {
+  loadStoredClaims,
+  loadUserLocations,
+  saveStoredClaims,
+  saveUserLocations,
+} from "@/lib/claim-storage";
 import { loadGlobalClaims, publishClaim, removeGlobalClaim } from "@/lib/global-claims";
 import {
   loadGlobalLocations,
@@ -96,7 +102,17 @@ function findLocationById(
   return locations.find((l) => l.id === locationId);
 }
 
-export function MapView() {
+interface MapViewProps {
+  focusClaimId?: string | null;
+  onFocusClaimHandled?: () => void;
+  hasBottomNav?: boolean;
+}
+
+export function MapView({
+  focusClaimId,
+  onFocusClaimHandled,
+  hasBottomNav,
+}: MapViewProps = {}) {
   const { user } = useAuth();
   const { friendIds } = useFriendships();
   const currentUserId = user!.id;
@@ -193,7 +209,7 @@ export function MapView() {
     [conqueredLocations]
   );
 
-  useEffect(() => {
+  const reloadUserData = useCallback(() => {
     const stored = loadStoredClaims(currentUserId);
     const storedLocations = loadUserLocations(currentUserId);
     const globalClaims = loadGlobalClaims();
@@ -211,10 +227,7 @@ export function MapView() {
       saveUserLocations(migratedLocations, currentUserId);
     }
 
-    if (migratedLocations.length > 0) {
-      setUserClaimedLocations(migratedLocations);
-    }
-
+    setUserClaimedLocations(migratedLocations);
     setSharedLocations(globalLocations);
 
     const mergedClaims = [...globalClaims];
@@ -226,10 +239,26 @@ export function MapView() {
       }
     }
 
-    if (mergedClaims.length > 0) {
-      setClaims(mergedClaims);
-    }
+    setClaims(mergedClaims);
   }, [currentUserId]);
+
+  useEffect(() => {
+    reloadUserData();
+    const handler = () => reloadUserData();
+    window.addEventListener(DATA_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, handler);
+  }, [reloadUserData]);
+
+  useEffect(() => {
+    if (!focusClaimId || claims.length === 0) return;
+    const claim = claims.find((item) => item.id === focusClaimId);
+    if (!claim) return;
+    const loc = findLocationById(allLocations, claim.location_id);
+    const map = mapRef.current;
+    if (!loc || !map) return;
+    map.flyTo([loc.latitude, loc.longitude], USER_MAP_ZOOM, { duration: 0.8 });
+    onFocusClaimHandled?.();
+  }, [focusClaimId, claims, allLocations, onFocusClaimHandled]);
 
   const currentUserProfile = useMemo(
     () =>
@@ -611,6 +640,7 @@ export function MapView() {
       publishClaim(newClaim);
       return next;
     });
+    notifyDataChanged();
     setClaimingLocation(null);
     setNearbyUnexplored(null);
     setSelectedLocation({
@@ -659,6 +689,7 @@ export function MapView() {
 
       setClaimToast(`Relinquished ${claim.place_name}`);
       window.setTimeout(() => setClaimToast(null), 4000);
+      notifyDataChanged();
     },
     [claims, currentUserId, selectedLocation?.id]
   );
@@ -698,6 +729,7 @@ export function MapView() {
             activeUserIds={activeMonarchIds}
             selectedUserId={selectedProfileId}
             onSelectProfile={openProfile}
+            raised={hasBottomNav}
           />
         </div>
 
@@ -736,7 +768,7 @@ export function MapView() {
       </div>
 
       {canClaimHere && !claimingLocation && (
-        <ClaimHereButton onClaim={startClaimHere} />
+        <ClaimHereButton onClaim={startClaimHere} raised={hasBottomNav} />
       )}
 
       {claimingLocation && (

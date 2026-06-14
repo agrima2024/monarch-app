@@ -7,12 +7,14 @@ interface MonarchLegendProps {
   activeUserIds: string[];
   selectedUserId?: string | null;
   onSelectProfile: (userId: string) => void;
+  raised?: boolean;
 }
 
 export function MonarchLegend({
   activeUserIds,
   selectedUserId,
   onSelectProfile,
+  raised,
 }: MonarchLegendProps) {
   const entries = activeUserIds
     .map((id) => {
@@ -28,7 +30,11 @@ export function MonarchLegend({
   if (entries.length === 0) return null;
 
   return (
-    <div className="absolute bottom-24 right-3 z-[1000] bg-surface-elevated/95 backdrop-blur-md rounded-xl border border-gold/15 shadow-xl p-3 min-w-[148px]">
+    <div
+      className={`absolute right-3 z-[1000] bg-surface-elevated/95 backdrop-blur-md rounded-xl border border-gold/15 shadow-xl p-3 min-w-[148px] ${
+        raised ? "bottom-36" : "bottom-24"
+      }`}
+    >
       <p className="text-[10px] uppercase tracking-widest text-muted mb-2">
         Monarchs
       </p>
