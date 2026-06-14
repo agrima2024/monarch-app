@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFriendships } from "@/contexts/FriendshipsContext";
 import { getMonarchColor } from "@/lib/monarch-colors";
+import { daysUntilDethroned, isDisgraced } from "@/lib/reputation";
 import { getUsernameInitial } from "@/lib/user-registry";
 import type { Claim, LocationWithClaim, Profile } from "@/lib/types";
 
@@ -248,6 +249,20 @@ export function ProfilePanel({
                         <p className="font-medium truncate">{claim.place_name}</p>
                         <p className="text-xs text-muted line-clamp-2 mt-0.5">
                           {claim.review_text}
+                        </p>
+                        <p
+                          className={`text-[10px] mt-1 tabular-nums ${
+                            claim.net_score < 0
+                              ? "text-red-300"
+                              : claim.net_score > 0
+                                ? "text-emerald-300"
+                                : "text-muted"
+                          }`}
+                        >
+                          Rep {claim.net_score > 0 ? "+" : ""}
+                          {claim.net_score}
+                          {isDisgraced(claim) &&
+                            ` · ${daysUntilDethroned(claim)}d left`}
                         </p>
                       </div>
                       <Crown

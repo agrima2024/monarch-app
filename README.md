@@ -12,6 +12,7 @@ This URL is hosted on GitHub Pages and stays online 24/7 — no tunnel or local 
 
 - **Login** — Sign up / Sign in with username and password (or Supabase email when configured)
 - **Friends** — Send requests by username; both people must accept before sharing a Friends Circle
+- **Reputation & dethroning** — Endorse or rebel on claims; negative reputation starts a 30-day grace period before the land is unclaimed
 - **Dual-tab map** — Community (all explorers on this device) and Friends (you + accepted friends only)
 - **Venue-sized kingdom zones** — colored footprints per monarch
 - **Claim Crown flow** — Live photo + review with Royal Guard validation

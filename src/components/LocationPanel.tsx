@@ -9,16 +9,20 @@ import {
   User,
   X,
 } from "lucide-react";
+import { ClaimVoteBar } from "@/components/ClaimVoteBar";
 import { getUserProfile } from "@/lib/user-registry";
 import { formatCoordinates, getDisplayName, isUnexplored } from "@/lib/display";
 import { getMonarchColor } from "@/lib/monarch-colors";
-import type { LocationWithClaim } from "@/lib/types";
+import type { LocationWithClaim, VoteType } from "@/lib/types";
 
 interface LocationPanelProps {
   location: LocationWithClaim;
   canClaim: boolean;
   isOwnClaim: boolean;
   raised?: boolean;
+  currentUserId: string;
+  userVote?: VoteType | null;
+  onVote: (voteType: VoteType) => void;
   onClaim: () => void;
   onDeleteClaim: () => void;
   onViewProfile?: (userId: string) => void;
@@ -30,6 +34,9 @@ export function LocationPanel({
   canClaim,
   isOwnClaim,
   raised,
+  currentUserId,
+  userVote,
+  onVote,
   onClaim,
   onDeleteClaim,
   onViewProfile,
@@ -142,6 +149,12 @@ export function LocationPanel({
               </div>
               <p className="text-sm leading-relaxed">{claim.review_text}</p>
             </div>
+            <ClaimVoteBar
+              claim={claim}
+              currentUserId={currentUserId}
+              userVote={userVote}
+              onVote={onVote}
+            />
             {isOwnClaim && (
               <button
                 type="button"

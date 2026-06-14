@@ -16,10 +16,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFriendships } from "@/contexts/FriendshipsContext";
 import { notifyDataChanged } from "@/lib/app-events";
+import { processClaims } from "@/lib/claim-pipeline";
 import { loadStoredClaims, saveStoredClaims } from "@/lib/claim-storage";
+import { purgeVotesForClaim } from "@/lib/claim-votes";
 import { loadGlobalClaims, removeGlobalClaim } from "@/lib/global-claims";
 import { removeGlobalLocation } from "@/lib/global-locations";
 import { getMonarchColor } from "@/lib/monarch-colors";
+import { daysUntilDethroned, isDisgraced } from "@/lib/reputation";
 import type { Claim } from "@/lib/types";
 import { getUsernameInitial, getUserProfile } from "@/lib/user-registry";
 
@@ -58,10 +61,12 @@ export function AccountView({
       if (claim.user_id === user.id) mine.set(claim.id, claim);
     }
     setMyClaims(
-      [...mine.values()].sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
+      processClaims([...mine.values()])
+        .filter((claim) => claim.user_id === user.id)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
     );
   }, [user]);
 
@@ -94,6 +99,7 @@ export function AccountView({
   const handleDeleteClaim = (claim: Claim) => {
     removeGlobalClaim(claim.id);
     removeGlobalLocation(claim.location_id);
+    purgeVotesForClaim(claim.id);
     const remaining = loadStoredClaims(user.id).filter(
       (item) => item.id !== claim.id
     );
@@ -336,6 +342,21 @@ export function AccountView({
                     <p className="font-medium truncate">{claim.place_name}</p>
                     <p className="text-xs text-muted line-clamp-2 mt-0.5">
                       {claim.review_text}
+                    </p>
+                    <p
+                      className={`text-xs mt-1 tabular-nums ${
+                        claim.net_score < 0
+                          ? "text-red-300"
+                          : claim.net_score > 0
+                            ? "text-emerald-300"
+                            : "text-muted"
+                      }`}
+                    >
+                      Reputation: {claim.net_score > 0 ? "+" : ""}
+                      {claim.net_score}
+                      {isDisgraced(claim) &&
+                        daysUntilDethroned(claim) !== null &&
+                        ` · ${daysUntilDethroned(claim)}d until dethroned`}
                     </p>
                     {onViewTerritoryOnMap && (
                       <button

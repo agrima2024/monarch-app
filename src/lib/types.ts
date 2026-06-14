@@ -1,5 +1,7 @@
 export type FriendshipStatus = "pending" | "accepted";
 
+export type VoteType = "up" | "down";
+
 export interface Profile {
   id: string;
   username: string;
@@ -22,7 +24,17 @@ export interface Claim {
   photo_url: string;
   review_text: string;
   created_at: string;
+  net_score: number;
+  disgraced_at: string | null;
   profile?: Profile;
+}
+
+export interface ClaimVote {
+  id: string;
+  claim_id: string;
+  user_id: string;
+  vote_type: VoteType;
+  created_at: string;
 }
 
 export interface Friendship {

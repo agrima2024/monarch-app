@@ -14,6 +14,13 @@ import {
   saveStoredClaims,
   saveUserLocations,
 } from "@/lib/claim-storage";
+import { processClaims, persistClaimUpdate } from "@/lib/claim-pipeline";
+import {
+  applyReputationToClaim,
+  getUserVoteForClaim,
+  purgeVotesForClaim,
+  submitClaimVote,
+} from "@/lib/claim-votes";
 import { loadGlobalClaims, publishClaim, removeGlobalClaim } from "@/lib/global-claims";
 import {
   loadGlobalLocations,
@@ -29,7 +36,14 @@ import {
   venueBounds,
 } from "@/lib/geo";
 import { getMonarchColor } from "@/lib/monarch-colors";
-import type { Claim, Location, LocationWithClaim, MapTab } from "@/lib/types";
+import { isDisgraced, withFreshClaimDefaults } from "@/lib/reputation";
+import type {
+  Claim,
+  Location,
+  LocationWithClaim,
+  MapTab,
+  VoteType,
+} from "@/lib/types";
 import { ClaimCrownModal } from "./ClaimCrownModal";
 import { ClaimHereButton } from "./ClaimHereButton";
 import { LocationPanel } from "./LocationPanel";
@@ -243,7 +257,7 @@ export function MapView({
       }
     }
 
-    setClaims(mergedClaims);
+    setClaims(processClaims(mergedClaims));
   }, [currentUserId]);
 
   useEffect(() => {
@@ -447,13 +461,16 @@ export function MapView({
         ? getUsernameInitial(profile.username)
         : monarch.label.charAt(0).toUpperCase();
 
+      const disgraced = isDisgraced(claim);
+
       const zone = L.rectangle(venueBounds(location.latitude, location.longitude), {
-        color: monarch.stroke,
-        fillColor: monarch.fill,
+        color: disgraced ? "#f87171" : monarch.stroke,
+        fillColor: disgraced ? "#7f1d1d" : monarch.fill,
         fillOpacity: selectedProfileId === claim.user_id ? 0.65 : 0.45,
         weight: selectedProfileId === claim.user_id ? 3 : 2,
-        opacity: 0.9,
-        className: "kingdom-zone",
+        opacity: disgraced ? 0.75 : 0.9,
+        dashArray: disgraced ? "4 4" : undefined,
+        className: disgraced ? "kingdom-zone disgraced-zone" : "kingdom-zone",
       })
         .addTo(map)
         .on("mouseover", () => {
@@ -472,7 +489,7 @@ export function MapView({
         });
 
       zone.bindTooltip(
-        `<strong>${placeName}</strong><br/><span style="opacity:0.8">@${profile?.username ?? monarch.label}</span>`,
+        `<strong>${placeName}</strong><br/><span style="opacity:0.8">@${profile?.username ?? monarch.label}</span>${disgraced ? `<br/><span style="color:#fca5a5">Disgraced · ${claim.net_score}</span>` : claim.net_score !== 0 ? `<br/><span style="opacity:0.7">Rep: ${claim.net_score > 0 ? "+" : ""}${claim.net_score}</span>` : ""}`,
         { direction: "top", className: "monarch-tooltip", sticky: true }
       );
 
@@ -636,7 +653,7 @@ export function MapView({
       claimedSpot,
     ]);
 
-    const newClaim: Claim = {
+    const newClaim = withFreshClaimDefaults({
       id: `claim-${Date.now()}`,
       location_id: claimingLocation.id,
       user_id: currentUserId,
@@ -644,7 +661,7 @@ export function MapView({
       photo_url: photoPreview,
       review_text: reviewText,
       created_at: new Date().toISOString(),
-    };
+    });
 
     setClaims((prev) => {
       const next = [...prev.filter((c) => c.location_id !== newClaim.location_id), newClaim];
@@ -683,8 +700,9 @@ export function MapView({
       setClaims((prev) => {
         const next = prev.filter((item) => item.id !== claimId);
         saveStoredClaims(next, currentUserId);
-        removeGlobalClaim(claimId);
-        return next;
+      removeGlobalClaim(claimId);
+      purgeVotesForClaim(claimId);
+      return next;
       });
 
       setUserClaimedLocations((prev) => {
@@ -704,6 +722,39 @@ export function MapView({
       notifyDataChanged();
     },
     [claims, currentUserId, selectedLocation?.id]
+  );
+
+  const handleVote = useCallback(
+    (claimId: string, voteType: VoteType) => {
+      const claim = claims.find((item) => item.id === claimId);
+      if (!claim) return;
+
+      const result = submitClaimVote(
+        claimId,
+        currentUserId,
+        voteType,
+        claim.user_id
+      );
+      if (result.error) {
+        setClaimToast(result.error);
+        window.setTimeout(() => setClaimToast(null), 3500);
+        return;
+      }
+
+      const updated = applyReputationToClaim(claim);
+      persistClaimUpdate(updated);
+
+      setClaims((prev) =>
+        processClaims(prev.map((item) => (item.id === claimId ? updated : item)))
+      );
+
+      if (selectedLocation?.claim?.id === claimId) {
+        setSelectedLocation({ ...selectedLocation, claim: updated });
+      }
+
+      notifyDataChanged();
+    },
+    [claims, currentUserId, selectedLocation]
   );
 
   const conqueredCount = conqueredLocations.length;
@@ -767,6 +818,19 @@ export function MapView({
             canClaim={canClaimLocation(selectedLocation)}
             isOwnClaim={selectedLocation.claim?.user_id === currentUserId}
             raised={hasBottomNav}
+            currentUserId={currentUserId}
+            userVote={
+              selectedLocation.claim
+                ? getUserVoteForClaim(
+                    selectedLocation.claim.id,
+                    currentUserId
+                  )?.vote_type ?? null
+                : null
+            }
+            onVote={(voteType) => {
+              const claimId = selectedLocation.claim?.id;
+              if (claimId) handleVote(claimId, voteType);
+            }}
             onClaim={() => setClaimingLocation(selectedLocation)}
             onDeleteClaim={() => {
               const claimId = selectedLocation.claim?.id;
