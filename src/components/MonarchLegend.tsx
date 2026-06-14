@@ -38,6 +38,7 @@ export function MonarchLegend({
       <p className="text-[10px] uppercase tracking-widest text-muted mb-2">
         Monarchs
       </p>
+      <p className="text-[10px] text-muted/80 mb-2 -mt-1">Tap to open account</p>
       <ul className="space-y-1">
         {entries.map(({ id, username, color }) => (
           <li key={id}>

@@ -18,6 +18,7 @@ interface LocationPanelProps {
   location: LocationWithClaim;
   canClaim: boolean;
   isOwnClaim: boolean;
+  raised?: boolean;
   onClaim: () => void;
   onDeleteClaim: () => void;
   onViewProfile?: (userId: string) => void;
@@ -28,6 +29,7 @@ export function LocationPanel({
   location,
   canClaim,
   isOwnClaim,
+  raised,
   onClaim,
   onDeleteClaim,
   onViewProfile,
@@ -40,7 +42,11 @@ export function LocationPanel({
   const monarchColor = claim ? getMonarchColor(claim.user_id) : null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[5500] mx-3 mb-3 pointer-events-auto">
+    <div
+      className={`fixed left-0 right-0 z-[5500] mx-3 pointer-events-auto ${
+        raised ? "bottom-20" : "bottom-3"
+      }`}
+    >
       <div
         className="bg-surface-elevated/95 backdrop-blur-md rounded-2xl border shadow-2xl overflow-hidden"
         style={
@@ -122,6 +128,11 @@ export function LocationPanel({
                   <User className="h-3.5 w-3.5 text-muted" />
                   @{monarch.username}
                 </p>
+                {onViewProfile && !isOwnClaim && (
+                  <p className="text-[10px] text-muted mt-1">
+                    Tap to open account · Add friend
+                  </p>
+                )}
               </div>
             </button>
             <div className="p-3 rounded-xl bg-surface border border-gold/10">

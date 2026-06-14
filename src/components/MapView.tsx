@@ -105,12 +105,16 @@ function findLocationById(
 interface MapViewProps {
   focusClaimId?: string | null;
   onFocusClaimHandled?: () => void;
+  openProfileId?: string | null;
+  onOpenProfileHandled?: () => void;
   hasBottomNav?: boolean;
 }
 
 export function MapView({
   focusClaimId,
   onFocusClaimHandled,
+  openProfileId,
+  onOpenProfileHandled,
   hasBottomNav,
 }: MapViewProps = {}) {
   const { user } = useAuth();
@@ -259,6 +263,14 @@ export function MapView({
     map.flyTo([loc.latitude, loc.longitude], USER_MAP_ZOOM, { duration: 0.8 });
     onFocusClaimHandled?.();
   }, [focusClaimId, claims, allLocations, onFocusClaimHandled]);
+
+  useEffect(() => {
+    if (!openProfileId) return;
+    setSelectedLocation(null);
+    setClaimingLocation(null);
+    setSelectedProfileId(openProfileId);
+    onOpenProfileHandled?.();
+  }, [openProfileId, onOpenProfileHandled]);
 
   const currentUserProfile = useMemo(
     () =>
@@ -738,6 +750,7 @@ export function MapView({
             profile={selectedProfile}
             claims={getClaimsForUser(selectedProfile.id, claims)}
             locations={locationsWithClaims}
+            raised={hasBottomNav}
             onClose={() => setSelectedProfileId(null)}
             onSelectPlace={(loc) => {
               flyToLocation(loc);
@@ -753,6 +766,7 @@ export function MapView({
             location={selectedLocation}
             canClaim={canClaimLocation(selectedLocation)}
             isOwnClaim={selectedLocation.claim?.user_id === currentUserId}
+            raised={hasBottomNav}
             onClaim={() => setClaimingLocation(selectedLocation)}
             onDeleteClaim={() => {
               const claimId = selectedLocation.claim?.id;

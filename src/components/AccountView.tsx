@@ -25,9 +25,13 @@ import { getUsernameInitial, getUserProfile } from "@/lib/user-registry";
 
 interface AccountViewProps {
   onViewTerritoryOnMap?: (claimId: string) => void;
+  onOpenProfile?: (userId: string) => void;
 }
 
-export function AccountView({ onViewTerritoryOnMap }: AccountViewProps) {
+export function AccountView({
+  onViewTerritoryOnMap,
+  onOpenProfile,
+}: AccountViewProps) {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const {
@@ -130,35 +134,11 @@ export function AccountView({ onViewTerritoryOnMap }: AccountViewProps) {
           </div>
         </section>
 
-        {/* Add friend */}
-        <section className="rounded-2xl border border-gold/20 bg-surface-elevated p-5 space-y-3">
-          <h3 className="font-semibold flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-gold" />
-            Add friend
-          </h3>
-          <form onSubmit={handleRequest} className="flex gap-2">
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter their username"
-              className="flex-1 rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
-            />
-            <button
-              type="submit"
-              disabled={isSubmitting || !username.trim()}
-              className="shrink-0 px-4 py-3 rounded-xl bg-gold text-background font-semibold text-sm disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Send"
-              )}
-            </button>
-          </form>
-          <p className="text-xs text-muted">
-            Both of you must accept before you share a Friends Circle on the
-            map.
+        <section className="rounded-2xl border border-gold/15 bg-gold/5 p-4">
+          <p className="text-sm text-foreground/90 leading-relaxed">
+            <span className="text-gold font-medium">Add friends on the map:</span>{" "}
+            tap a person icon → open their account →{" "}
+            <span className="font-medium">Add friend</span>.
           </p>
         </section>
 
@@ -174,7 +154,7 @@ export function AccountView({ onViewTerritoryOnMap }: AccountViewProps) {
           </div>
         )}
 
-        {/* Incoming requests — always visible section */}
+        {/* Friend requests */}
         <section className="rounded-2xl border border-gold/20 bg-surface-elevated p-5 space-y-3">
           <h3 className="font-semibold flex items-center gap-2">
             <Users className="h-5 w-5 text-gold" />
@@ -197,12 +177,16 @@ export function AccountView({ onViewTerritoryOnMap }: AccountViewProps) {
                     key={friendship.id}
                     className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface border border-gold/10"
                   >
-                    <div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenProfile?.(friendship.user_id)}
+                      className="text-left min-w-0 flex-1 hover:opacity-90"
+                    >
                       <p className="text-sm font-medium">
                         @{profile?.username ?? "explorer"}
                       </p>
                       <p className="text-xs text-muted">Wants to be friends</p>
-                    </div>
+                    </button>
                     <div className="flex gap-2 shrink-0">
                       <button
                         type="button"
@@ -248,7 +232,13 @@ export function AccountView({ onViewTerritoryOnMap }: AccountViewProps) {
                       key={friendship.id}
                       className="flex items-center justify-between p-3 rounded-xl bg-surface border border-gold/10 text-sm"
                     >
-                      <span>@{profile?.username ?? "explorer"}</span>
+                      <button
+                        type="button"
+                        onClick={() => onOpenProfile?.(friendship.friend_id)}
+                        className="font-medium hover:text-gold transition-colors"
+                      >
+                        @{profile?.username ?? "explorer"}
+                      </button>
                       <span className="text-xs text-muted">Pending</span>
                     </li>
                   );
@@ -266,24 +256,58 @@ export function AccountView({ onViewTerritoryOnMap }: AccountViewProps) {
           </h3>
           {friendIds.length === 0 ? (
             <p className="text-sm text-muted">
-              No friends yet. Add someone by username above, or tap a monarch
-              on the map and hit &ldquo;Add friend&rdquo;.
+              No friends yet. Tap someone on the map and hit Add friend on
+              their account.
             </p>
           ) : (
             <ul className="space-y-2">
               {friendIds.map((friendId) => {
                 const profile = getUserProfile(friendId);
                 return (
-                  <li
-                    key={friendId}
-                    className="p-3 rounded-xl bg-surface border border-gold/10 text-sm font-medium"
-                  >
-                    @{profile?.username ?? "explorer"}
+                  <li key={friendId}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenProfile?.(friendId)}
+                      className="w-full text-left p-3 rounded-xl bg-surface border border-gold/10 text-sm font-medium hover:border-gold/30 transition-colors"
+                    >
+                      @{profile?.username ?? "explorer"}
+                    </button>
                   </li>
                 );
               })}
             </ul>
           )}
+        </section>
+
+        {/* Search by username — secondary option */}
+        <section className="rounded-2xl border border-gold/20 bg-surface-elevated p-5 space-y-3">
+          <h3 className="font-semibold flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-gold" />
+            Search by username
+          </h3>
+          <p className="text-xs text-muted">
+            Can&apos;t find them on the map? Look them up here instead.
+          </p>
+          <form onSubmit={handleRequest} className="flex gap-2">
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter their username"
+              className="flex-1 rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
+            />
+            <button
+              type="submit"
+              disabled={isSubmitting || !username.trim()}
+              className="shrink-0 px-4 py-3 rounded-xl bg-gold text-background font-semibold text-sm disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Send"
+              )}
+            </button>
+          </form>
         </section>
 
         {/* Territory */}

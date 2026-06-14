@@ -11,10 +11,16 @@ import { useFriendships } from "@/contexts/FriendshipsContext";
 export function AppShell() {
   const [activeTab, setActiveTab] = useState<AppTab>("map");
   const [focusClaimId, setFocusClaimId] = useState<string | null>(null);
+  const [openProfileId, setOpenProfileId] = useState<string | null>(null);
   const { incoming } = useFriendships();
 
   const handleViewTerritoryOnMap = useCallback((claimId: string) => {
     setFocusClaimId(claimId);
+    setActiveTab("map");
+  }, []);
+
+  const handleOpenProfile = useCallback((userId: string) => {
+    setOpenProfileId(userId);
     setActiveTab("map");
   }, []);
 
@@ -26,10 +32,15 @@ export function AppShell() {
           <MapView
             focusClaimId={focusClaimId}
             onFocusClaimHandled={() => setFocusClaimId(null)}
+            openProfileId={openProfileId}
+            onOpenProfileHandled={() => setOpenProfileId(null)}
             hasBottomNav
           />
         ) : (
-          <AccountView onViewTerritoryOnMap={handleViewTerritoryOnMap} />
+          <AccountView
+            onViewTerritoryOnMap={handleViewTerritoryOnMap}
+            onOpenProfile={handleOpenProfile}
+          />
         )}
       </main>
       <BottomNav

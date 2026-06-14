@@ -21,6 +21,7 @@ interface ProfilePanelProps {
   profile: Profile;
   claims: Claim[];
   locations: LocationWithClaim[];
+  raised?: boolean;
   onClose: () => void;
   onSelectPlace: (location: LocationWithClaim) => void;
   onViewAllOnMap: () => void;
@@ -31,6 +32,7 @@ export function ProfilePanel({
   profile,
   claims,
   locations,
+  raised,
   onClose,
   onSelectPlace,
   onViewAllOnMap,
@@ -101,7 +103,11 @@ export function ProfilePanel({
   };
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-[1000] mx-3 mb-3 max-h-[70vh]">
+    <div
+      className={`fixed left-0 right-0 z-[5600] mx-3 pointer-events-auto max-h-[70vh] ${
+        raised ? "bottom-20" : "bottom-3"
+      }`}
+    >
       <div
         className="bg-surface-elevated/95 backdrop-blur-md rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[70vh]"
         style={{ borderColor: `${color.fill}55` }}
@@ -188,12 +194,12 @@ export function ProfilePanel({
                 type="button"
                 onClick={handleRequestFriend}
                 disabled={isFriendActionLoading}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-sm font-medium hover:bg-gold/25 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-gold to-gold-dark text-background font-semibold text-sm shadow-lg shadow-gold/20 hover:shadow-gold/40 disabled:opacity-50"
               >
                 {isFriendActionLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
-                  <UserPlus className="h-4 w-4" />
+                  <UserPlus className="h-5 w-5" />
                 )}
                 Add friend
               </button>
