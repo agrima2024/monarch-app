@@ -1,4 +1,4 @@
-import type { Claim } from "./types";
+import type { Claim, ClaimVote } from "./types";
 
 /** Grace period before a disgraced monarch is dethroned. */
 export const DISGRACE_PERIOD_DAYS = 30;
