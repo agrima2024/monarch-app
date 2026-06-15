@@ -124,6 +124,10 @@ body {
   animation: disgraced-pulse 1.5s ease-in-out infinite;
 }
 
+video.mirror {
+  transform: scaleX(-1);
+}
+
 @keyframes disgraced-pulse {
   0%,
   100% {

@@ -1,14 +1,14 @@
 "use client";
 
 import {
-  Camera,
   Crown,
   Loader2,
   MapPin,
   Shield,
   X,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
+import { LivePhotoCapture } from "./LivePhotoCapture";
 import { formatCoordinates } from "@/lib/display";
 import { validateClaim } from "@/lib/validate-claim";
 import type { Location } from "@/lib/types";
@@ -30,25 +30,17 @@ export function ClaimCrownModal({
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [guardMessage, setGuardMessage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePhotoChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      setPhotoFile(file);
-      setGuardMessage(null);
+  const handlePhotoCapture = useCallback((file: File, preview: string) => {
+    setPhotoFile(file);
+    setPhotoPreview(preview);
+    setGuardMessage(null);
+  }, []);
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          setPhotoPreview(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    },
-    []
-  );
+  const handlePhotoClear = useCallback(() => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  }, []);
 
   const handleSubmit = async () => {
     if (!placeName.trim()) {
@@ -139,45 +131,11 @@ export function ClaimCrownModal({
 
           <div>
             <label className="text-sm text-muted mb-2 block">Live Photo</label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onClick={(e) => {
-                (e.target as HTMLInputElement).value = "";
-              }}
-              onChange={handlePhotoChange}
-              className="hidden"
+            <LivePhotoCapture
+              preview={photoPreview}
+              onCapture={handlePhotoCapture}
+              onClear={handlePhotoClear}
             />
-            {photoPreview ? (
-              <div className="relative rounded-xl overflow-hidden border border-gold/20">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photoPreview}
-                  alt="Claim preview"
-                  className="w-full h-48 object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-black/60 text-xs backdrop-blur-sm hover:bg-black/80 transition-colors"
-                >
-                  Retake
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full h-36 rounded-xl border-2 border-dashed border-gold/30 flex flex-col items-center justify-center gap-2 hover:border-gold/60 hover:bg-gold/5 transition-all"
-              >
-                <Camera className="h-8 w-8 text-gold" />
-                <span className="text-sm text-muted">
-                  Tap to capture live photo
-                </span>
-              </button>
-            )}
           </div>
 
           <div>
