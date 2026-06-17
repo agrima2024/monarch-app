@@ -9,7 +9,37 @@ interface LivePhotoCaptureProps {
   preview: string | null;
 }
 
-type CameraStatus = "checking" | "ready" | "active" | "unavailable";
+type CameraStatus = "checking" | "ready" | "active" | "denied";
+
+async function openCameraStream(): Promise<{
+  stream: MediaStream;
+  facingMode: "user" | "environment" | "unknown";
+}> {
+  const attempts: MediaStreamConstraints[] = [
+    { video: { facingMode: { ideal: "environment" } }, audio: false },
+    { video: { facingMode: "user" }, audio: false },
+    { video: true, audio: false },
+  ];
+
+  let lastError: unknown;
+  for (const constraints of attempts) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const track = stream.getVideoTracks()[0];
+      const settings = track?.getSettings();
+      const facing = settings?.facingMode;
+      return {
+        stream,
+        facingMode:
+          facing === "user" || facing === "environment" ? facing : "unknown",
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
 
 export function LivePhotoCapture({
   onCapture,
@@ -21,6 +51,7 @@ export function LivePhotoCapture({
   const [status, setStatus] = useState<CameraStatus>("checking");
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [useFrontCamera, setUseFrontCamera] = useState(false);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -31,42 +62,31 @@ export function LivePhotoCapture({
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function checkCamera() {
-      if (
-        typeof navigator === "undefined" ||
-        !navigator.mediaDevices?.getUserMedia
-      ) {
-        if (!cancelled) {
-          setStatus("unavailable");
-          setError("Your browser does not support camera access.");
-        }
-        return;
-      }
-
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const hasVideo = devices.some((device) => device.kind === "videoinput");
-        if (!cancelled) {
-          setStatus(hasVideo ? "ready" : "unavailable");
-          if (!hasVideo) {
-            setError("No camera was found on this device.");
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setStatus("ready");
-        }
-      }
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.mediaDevices?.getUserMedia === "function"
+    ) {
+      setStatus("ready");
+    } else {
+      setStatus("denied");
+      setError("Your browser does not support camera access.");
     }
 
-    checkCamera();
-    return () => {
-      cancelled = true;
-      stopStream();
-    };
+    return () => stopStream();
   }, [stopStream]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (status !== "active" || !video || !stream) return;
+
+    video.srcObject = stream;
+    void video.play().catch(() => {
+      setError("Could not start the camera preview. Tap Try again.");
+      setStatus("denied");
+      stopStream();
+    });
+  }, [status, stopStream]);
 
   const startCamera = useCallback(async () => {
     setIsStarting(true);
@@ -74,31 +94,21 @@ export function LivePhotoCapture({
     stopStream();
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-
+      const { stream, facingMode } = await openCameraStream();
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      setUseFrontCamera(facingMode === "user");
       setStatus("active");
     } catch (err) {
       const denied =
         err instanceof DOMException &&
-        (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
+        (err.name === "NotAllowedError" ||
+          err.name === "PermissionDeniedError");
 
-      setStatus("unavailable");
+      setStatus("denied");
       setError(
         denied
-          ? "Camera access was denied. Allow camera permission in your browser to claim territory."
-          : "No camera is available on this device."
+          ? "Camera access was denied. Allow camera permission in your browser settings, then tap Try again."
+          : "Could not open the camera. Make sure no other app is using it, then tap Try again."
       );
     } finally {
       setIsStarting(false);
@@ -114,6 +124,11 @@ export function LivePhotoCapture({
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    if (useFrontCamera) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
 
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
@@ -131,7 +146,7 @@ export function LivePhotoCapture({
       "image/jpeg",
       0.9
     );
-  }, [onCapture, stopStream]);
+  }, [onCapture, stopStream, useFrontCamera]);
 
   const handleRetake = useCallback(() => {
     onClear();
@@ -147,15 +162,27 @@ export function LivePhotoCapture({
     );
   }
 
-  if (status === "unavailable") {
+  if (status === "denied" && !preview) {
     return (
-      <div className="w-full rounded-xl border border-red-500/30 bg-red-950/30 p-4 flex flex-col items-center justify-center gap-2 text-center">
+      <div className="w-full rounded-xl border border-red-500/30 bg-red-950/30 p-4 flex flex-col items-center justify-center gap-3 text-center">
         <CameraOff className="h-8 w-8 text-red-400" />
         <p className="text-sm font-medium text-red-200">Camera required</p>
         <p className="text-xs text-red-200/80 leading-relaxed">
           {error ??
-            "A live camera photo is required to claim territory. Gallery uploads are not allowed."}
+            "A live camera photo is required. Gallery uploads are not allowed."}
         </p>
+        {typeof navigator.mediaDevices?.getUserMedia === "function" && (
+          <button
+            type="button"
+            onClick={() => {
+              setStatus("ready");
+              void startCamera();
+            }}
+            className="px-4 py-2 rounded-lg bg-surface border border-gold/20 text-sm text-gold hover:border-gold/40"
+          >
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -190,7 +217,7 @@ export function LivePhotoCapture({
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover mirror"
+            className={`w-full h-full object-cover ${useFrontCamera ? "mirror" : ""}`}
           />
         </div>
         <button
@@ -221,8 +248,8 @@ export function LivePhotoCapture({
         <>
           <Camera className="h-8 w-8 text-gold" />
           <span className="text-sm text-muted">Open camera for live photo</span>
-          <span className="text-[10px] text-muted/70">
-            Gallery uploads are not allowed
+          <span className="text-[10px] text-muted/70 px-4 text-center">
+            Uses your device camera — not photo uploads
           </span>
         </>
       )}

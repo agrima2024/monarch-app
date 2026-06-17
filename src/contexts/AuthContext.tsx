@@ -25,9 +25,7 @@ interface AuthContextValue {
   user: AppUser | null;
   isLoading: boolean;
   isSupabaseMode: boolean;
-  signInLocal: (username: string, password: string) => Promise<string | null>;
-  signInWithPassword: (email: string, password: string) => Promise<string | null>;
-  signUpLocal: (username: string, password: string) => Promise<string | null>;
+  signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (
     email: string,
     password: string,
@@ -124,76 +122,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isSupabaseMode]);
 
-  const signInLocal = useCallback(async (username: string, password: string) => {
-    const account = authenticateLocalUser(username, password);
-    if (!account) {
-      return "Wrong username or password.";
-    }
-
-    const appUser: AppUser = {
-      id: account.id,
-      username: account.username,
-      mode: "demo",
-    };
-
-    saveDemoSession(appUser);
-    setUser(appUser);
-    return null;
-  }, []);
-
-  const signUpLocal = useCallback(async (username: string, password: string) => {
-    const result = registerLocalUser(username, password);
-    if ("error" in result) return result.error;
-
-    const appUser: AppUser = {
-      id: result.user.id,
-      username: result.user.username,
-      mode: "demo",
-    };
-
-    saveDemoSession(appUser);
-    setUser(appUser);
-    return null;
-  }, []);
-
-  const signInWithPassword = useCallback(
+  const signIn = useCallback(
     async (email: string, password: string) => {
-      if (!isSupabaseMode) {
-        return "Use username and password to sign in.";
+      const trimmedEmail = email.trim();
+
+      if (isSupabaseMode) {
+        const supabase = createClient();
+        const { error } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
+        return error?.message ?? null;
       }
 
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const account = authenticateLocalUser(trimmedEmail, password);
+      if (!account) {
+        return "Wrong email or password for this device. Sign up here if you have not created an account on this phone yet.";
+      }
 
-      return error?.message ?? null;
+      const appUser: AppUser = {
+        id: account.id,
+        username: account.username,
+        email: account.email,
+        mode: "demo",
+      };
+
+      saveDemoSession(appUser);
+      setUser(appUser);
+      return null;
     },
     [isSupabaseMode]
   );
 
   const signUp = useCallback(
     async (email: string, password: string, username: string) => {
-      if (!isSupabaseMode) {
-        return "Use username and password to sign up.";
-      }
-
+      const trimmedEmail = email.trim();
       const trimmedUsername = username.trim().replace(/^@/, "");
+
       if (trimmedUsername.length < 2) {
         return "Choose a username with at least 2 characters.";
       }
 
-      const supabase = createClient();
-      const { error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: { username: trimmedUsername },
-        },
-      });
+      if (isSupabaseMode) {
+        const supabase = createClient();
+        const { error } = await supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+          options: {
+            data: { username: trimmedUsername },
+          },
+        });
+        return error?.message ?? null;
+      }
 
-      return error?.message ?? null;
+      const result = registerLocalUser(trimmedEmail, trimmedUsername, password);
+      if ("error" in result) return result.error;
+
+      const appUser: AppUser = {
+        id: result.user.id,
+        username: result.user.username,
+        email: result.user.email,
+        mode: "demo",
+      };
+
+      saveDemoSession(appUser);
+      setUser(appUser);
+      return null;
     },
     [isSupabaseMode]
   );
@@ -214,22 +208,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isLoading,
       isSupabaseMode,
-      signInLocal,
-      signInWithPassword,
-      signUpLocal,
+      signIn,
       signUp,
       signOut,
     }),
-    [
-      user,
-      isLoading,
-      isSupabaseMode,
-      signInLocal,
-      signInWithPassword,
-      signUpLocal,
-      signUp,
-      signOut,
-    ]
+    [user, isLoading, isSupabaseMode, signIn, signUp, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

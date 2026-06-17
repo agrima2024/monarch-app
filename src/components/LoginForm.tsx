@@ -1,23 +1,26 @@
 "use client";
 
-import { Crown, Loader2, LogIn, Shield, UserPlus } from "lucide-react";
+import {
+  Crown,
+  Eye,
+  EyeOff,
+  Loader2,
+  LogIn,
+  Shield,
+  UserPlus,
+} from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 type AuthMode = "signin" | "signup";
 
 export function LoginForm() {
-  const {
-    isSupabaseMode,
-    signInLocal,
-    signInWithPassword,
-    signUpLocal,
-    signUp,
-  } = useAuth();
+  const { isSupabaseMode, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,31 +32,19 @@ export function LoginForm() {
     setIsSubmitting(true);
 
     try {
-      if (isSupabaseMode) {
-        if (mode === "signin") {
-          const message = await signInWithPassword(email, password);
-          if (message) setError(message);
-          return;
-        }
-
-        const message = await signUp(email, password, username);
-        if (message) {
-          setError(message);
-        } else {
-          setInfo("Account created. Check your email to confirm, then sign in.");
-          setMode("signin");
-        }
-        return;
-      }
-
       if (mode === "signin") {
-        const message = await signInLocal(username, password);
+        const message = await signIn(email, password);
         if (message) setError(message);
         return;
       }
 
-      const message = await signUpLocal(username, password);
-      if (message) setError(message);
+      const message = await signUp(email, password, username);
+      if (message) {
+        setError(message);
+      } else if (isSupabaseMode) {
+        setInfo("Account created. Check your email to confirm, then sign in.");
+        setMode("signin");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -70,7 +61,7 @@ export function LoginForm() {
           </div>
           <h1 className="text-3xl font-bold shimmer-text">Monarch</h1>
           <p className="text-sm text-muted mt-2">
-            Create an account or sign in to explore and claim territory.
+            Sign in with email to explore and claim territory.
           </p>
         </div>
 
@@ -109,6 +100,37 @@ export function LoginForm() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {!isSupabaseMode && (
+              <div className="rounded-xl border border-amber-500/25 bg-amber-950/25 px-3 py-2.5 text-xs text-amber-100/90 leading-relaxed">
+                Accounts are saved on this browser only. To use the same login
+                on your phone and laptop, cloud sign-in must be enabled
+                (Supabase).
+              </div>
+            )}
+
+            {isSupabaseMode && (
+              <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/25 px-3 py-2.5 text-xs text-emerald-100/90 leading-relaxed">
+                Cloud sign-in is on — use the same email and password on any
+                device.
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="email" className="text-sm text-muted mb-2 block">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                className="w-full rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
+              />
+            </div>
+
             {mode === "signup" && (
               <div>
                 <label
@@ -130,86 +152,37 @@ export function LoginForm() {
               </div>
             )}
 
-            {isSupabaseMode ? (
-              <>
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="text-sm text-muted mb-2 block"
-                  >
-                    Email
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    required
-                    className="w-full rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
-                  />
-                </div>
-
-                {mode === "signup" && (
-                  <div>
-                    <label
-                      htmlFor="supabase-username"
-                      className="text-sm text-muted mb-2 block"
-                    >
-                      Display username
-                    </label>
-                    <input
-                      id="supabase-username"
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="your_username"
-                      autoComplete="username"
-                      required
-                      className="w-full rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <div>
-                <label
-                  htmlFor="local-username"
-                  className="text-sm text-muted mb-2 block"
-                >
-                  Username
-                </label>
-                <input
-                  id="local-username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="your_username"
-                  autoComplete="username"
-                  required
-                  className="w-full rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
-                />
-              </div>
-            )}
-
             <div>
               <label htmlFor="password" className="text-sm text-muted mb-2 block">
                 Password
               </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete={
-                  mode === "signup" ? "new-password" : "current-password"
-                }
-                required
-                minLength={6}
-                className="w-full rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete={
+                    mode === "signup" ? "new-password" : "current-password"
+                  }
+                  required
+                  minLength={6}
+                  className="w-full rounded-xl bg-surface border border-gold/10 px-4 py-3 pr-12 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-muted hover:text-foreground hover:bg-surface transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             {error && (

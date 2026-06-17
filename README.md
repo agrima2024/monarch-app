@@ -19,6 +19,19 @@ This URL is hosted on GitHub Pages and stays online 24/7 — no tunnel or local 
 - **Monarch profiles** — tap a person icon to see conquered land
 - **Mobile-first PWA** — Responsive layout with manifest
 
+## Cross-device sign in (phone + laptop)
+
+Accounts use **email + password**. To sign in on multiple devices with the same account:
+
+1. Create a free project at [supabase.com](https://supabase.com)
+2. Run both SQL migrations in `supabase/migrations/`
+3. In GitHub → Settings → Secrets → Actions, add:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. Push to `main` (or re-run the deploy workflow)
+
+Without Supabase, accounts are stored **only in the browser** on each device.
+
 ## Local development
 
 ```bash
