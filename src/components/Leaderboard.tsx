@@ -29,18 +29,18 @@ export function Leaderboard({
         type="button"
         aria-label="Close leaderboard"
         onClick={onClose}
-        className={`fixed inset-0 z-[6600] bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[7100] bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${
           open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       />
 
       <aside
-        className={`fixed top-0 right-0 z-[6700] h-full w-[min(100vw,360px)] bg-zinc-950/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed top-0 right-0 z-[7200] flex w-[min(100vw,360px)] flex-col bg-zinc-950/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl transition-transform duration-300 ease-out bottom-[var(--bottom-nav-offset)] ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
         aria-hidden={!open}
       >
-        <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-4">
           <div className="flex items-center gap-2">
             <Crown className="h-5 w-5 text-gold" />
             <div>
@@ -59,7 +59,7 @@ export function Leaderboard({
           </button>
         </div>
 
-        <div className="p-4 space-y-2 overflow-y-auto h-[calc(100%-4.5rem)]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-2">
           {entries.length === 0 ? (
             <p className="text-sm text-muted text-center py-8">
               No explorers ranked yet. Claim territory to appear here!

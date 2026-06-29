@@ -12,6 +12,7 @@
   --muted: #78716c;
   --accent-purple: #7c3aed;
   --accent-emerald: #059669;
+  --bottom-nav-offset: calc(5.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 @theme inline {

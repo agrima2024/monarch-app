@@ -41,17 +41,17 @@ export function GroupChatDrawer({
         type="button"
         aria-label="Close group chat"
         onClick={onClose}
-        className={`fixed inset-0 z-[6600] bg-black/40 transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[7100] bg-black/40 transition-opacity duration-300 ${
           open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       />
 
       <aside
-        className={`fixed top-0 left-0 z-[6700] h-full w-[min(100vw,340px)] bg-zinc-950/95 backdrop-blur-xl border-r border-zinc-800 shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed top-0 left-0 z-[7200] flex w-[min(100vw,340px)] flex-col bg-zinc-950/95 backdrop-blur-xl border-r border-zinc-800 shadow-2xl transition-transform duration-300 ease-out bottom-[var(--bottom-nav-offset)] ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-4">
           <div>
             <h2 className="font-semibold">{groupName}</h2>
             <p className="text-[10px] text-muted uppercase tracking-widest">
@@ -67,7 +67,7 @@ export function GroupChatDrawer({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 h-[calc(100%-8.5rem)]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-3">
           {messages.length === 0 ? (
             <p className="text-sm text-muted">
               Coordinate territory strategy here. Share coordinate links to rally
@@ -112,7 +112,7 @@ export function GroupChatDrawer({
           )}
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-zinc-800 bg-zinc-950/90">
+        <div className="shrink-0 border-t border-zinc-800 bg-zinc-950/90 p-3">
           <div className="flex gap-2">
             <input
               type="text"
