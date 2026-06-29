@@ -1,11 +1,11 @@
 "use client";
 
+import { Suspense, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/contexts/AuthContext";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
@@ -20,4 +20,12 @@ export default function LoginPage() {
   }
 
   return <LoginForm />;
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
+  );
 }

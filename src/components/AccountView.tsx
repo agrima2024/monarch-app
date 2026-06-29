@@ -25,6 +25,7 @@ import { getMonarchColor } from "@/lib/monarch-colors";
 import { daysUntilDethroned, isDisgraced } from "@/lib/reputation";
 import type { Claim } from "@/lib/types";
 import { getUsernameInitial, getUserProfile } from "@/lib/user-registry";
+import { InviteFriendButton } from "@/components/InviteFriendButton";
 
 interface AccountViewProps {
   onViewTerritoryOnMap?: (claimId: string) => void;
@@ -140,6 +141,8 @@ export function AccountView({
           </div>
         </section>
 
+        <InviteFriendButton userId={user.id} username={user.username} />
+
         <section className="rounded-2xl border border-gold/15 bg-gold/5 p-4">
           <p className="text-sm text-foreground/90 leading-relaxed">
             <span className="text-gold font-medium">Add friends on the map:</span>{" "}
@@ -191,7 +194,13 @@ export function AccountView({
                       <p className="text-sm font-medium">
                         @{profile?.username ?? "explorer"}
                       </p>
-                      <p className="text-xs text-muted">Wants to be friends</p>
+                      {friendship.invite_message ? (
+                        <p className="text-xs text-foreground/80 mt-1 leading-relaxed">
+                          {friendship.invite_message}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted">Wants to be friends</p>
+                      )}
                     </button>
                     <div className="flex gap-2 shrink-0">
                       <button

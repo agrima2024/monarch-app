@@ -42,6 +42,7 @@ export interface Friendship {
   user_id: string;
   friend_id: string;
   status: FriendshipStatus;
+  invite_message?: string;
 }
 
 export type MapTab = "community" | "friends";

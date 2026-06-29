@@ -19,6 +19,7 @@ import {
   authenticateLocalUser,
   registerLocalUser,
 } from "@/lib/user-registry";
+import { applyPendingInviteFriendRequest } from "@/lib/friend-invites";
 import { createClient } from "@/lib/supabase/client";
 
 interface AuthContextValue {
@@ -128,11 +129,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (isSupabaseMode) {
         const supabase = createClient();
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: trimmedEmail,
           password,
         });
-        return error?.message ?? null;
+        if (error) return error.message;
+        if (data.user) {
+          applyPendingInviteFriendRequest(data.user.id);
+        }
+        return null;
       }
 
       const account = authenticateLocalUser(trimmedEmail, password);
@@ -149,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       saveDemoSession(appUser);
       setUser(appUser);
+      applyPendingInviteFriendRequest(appUser.id);
       return null;
     },
     [isSupabaseMode]
@@ -165,14 +171,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (isSupabaseMode) {
         const supabase = createClient();
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: trimmedEmail,
           password,
           options: {
             data: { username: trimmedUsername },
           },
         });
-        return error?.message ?? null;
+        if (error) return error.message;
+        if (data.user) {
+          applyPendingInviteFriendRequest(data.user.id);
+        }
+        return null;
       }
 
       const result = registerLocalUser(trimmedEmail, trimmedUsername, password);
@@ -187,6 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       saveDemoSession(appUser);
       setUser(appUser);
+      applyPendingInviteFriendRequest(appUser.id);
       return null;
     },
     [isSupabaseMode]

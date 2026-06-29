@@ -9,12 +9,19 @@ import {
   Shield,
   UserPlus,
 } from "lucide-react";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  loadPendingInvite,
+  parseInviteFromSearchParams,
+  savePendingInvite,
+} from "@/lib/friend-invites";
 
 type AuthMode = "signin" | "signup";
 
 export function LoginForm() {
+  const searchParams = useSearchParams();
   const { isSupabaseMode, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
@@ -24,6 +31,23 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [inviteBanner, setInviteBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    const parsed = parseInviteFromSearchParams(searchParams);
+    if (parsed) {
+      savePendingInvite(parsed);
+      setInviteBanner(parsed.inviterUsername);
+      setMode("signup");
+      return;
+    }
+
+    const stored = loadPendingInvite();
+    if (stored) {
+      setInviteBanner(stored.inviterUsername);
+      setMode("signup");
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -66,6 +90,19 @@ export function LoginForm() {
         </div>
 
         <div className="rounded-2xl border border-gold/20 bg-surface-elevated shadow-2xl overflow-hidden">
+          {inviteBanner && (
+            <div className="px-6 py-4 border-b border-gold/10 bg-gold/10">
+              <p className="text-sm text-gold font-medium">
+                You&apos;re invited to Monarch
+              </p>
+              <p className="text-sm text-foreground/90 mt-1">
+                @{inviteBanner} invited you to join and explore together. Create
+                your account below — they&apos;ll automatically send you a friend
+                request.
+              </p>
+            </div>
+          )}
+
           <div className="flex border-b border-gold/10">
             <button
               type="button"

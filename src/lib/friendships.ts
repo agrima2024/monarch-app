@@ -72,7 +72,8 @@ export function sendFriendRequest(
 
 export function sendFriendRequestToUser(
   fromUserId: string,
-  toUserId: string
+  toUserId: string,
+  inviteMessage?: string
 ): { friendship: Friendship } | { error: string } {
   if (toUserId === fromUserId) {
     return { error: "You cannot friend yourself." };
@@ -97,6 +98,7 @@ export function sendFriendRequestToUser(
     user_id: fromUserId,
     friend_id: toUserId,
     status: "pending",
+    ...(inviteMessage ? { invite_message: inviteMessage } : {}),
   };
 
   saveAll([...loadAll(), friendship]);
