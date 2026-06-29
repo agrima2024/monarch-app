@@ -10,13 +10,13 @@ interface TabToggleProps {
 
 export function TabToggle({ activeTab, onTabChange }: TabToggleProps) {
   return (
-    <div className="flex rounded-full bg-surface-elevated p-1 border border-gold/20 shadow-lg">
+    <div className="flex rounded-full glass-panel p-1">
       <button
         type="button"
         onClick={() => onTabChange("community")}
         className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
           activeTab === "community"
-            ? "bg-gold text-background shadow-md"
+            ? "bg-gold text-background gold-glow"
             : "text-muted hover:text-foreground"
         }`}
       >

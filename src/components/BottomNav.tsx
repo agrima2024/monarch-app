@@ -17,7 +17,7 @@ export function BottomNav({
 }: BottomNavProps) {
   return (
     <nav
-      className="shrink-0 border-t border-gold/10 bg-surface/95 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)]"
+      className="pointer-events-auto mx-4 mb-3 rounded-2xl glass-panel pb-[env(safe-area-inset-bottom,0px)]"
       aria-label="Main navigation"
     >
       <div className="flex">

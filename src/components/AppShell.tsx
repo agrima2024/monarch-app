@@ -25,29 +25,35 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="flex flex-col h-dvh overflow-hidden">
-      <Header />
-      <main className="flex-1 min-h-0 relative">
-        {activeTab === "map" ? (
-          <MapView
-            focusClaimId={focusClaimId}
-            onFocusClaimHandled={() => setFocusClaimId(null)}
-            openProfileId={openProfileId}
-            onOpenProfileHandled={() => setOpenProfileId(null)}
-            hasBottomNav
-          />
-        ) : (
+    <div className="relative h-dvh overflow-hidden bg-background">
+      {activeTab === "map" && (
+        <MapView
+          focusClaimId={focusClaimId}
+          onFocusClaimHandled={() => setFocusClaimId(null)}
+          openProfileId={openProfileId}
+          onOpenProfileHandled={() => setOpenProfileId(null)}
+          hasBottomNav
+        />
+      )}
+
+      {activeTab === "account" && (
+        <div className="absolute inset-0 overflow-y-auto pb-24 pt-[60px]">
           <AccountView
             onViewTerritoryOnMap={handleViewTerritoryOnMap}
             onOpenProfile={handleOpenProfile}
           />
-        )}
-      </main>
-      <BottomNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        pendingRequests={incoming.length}
-      />
+        </div>
+      )}
+
+      <Header floating />
+
+      <div className="absolute bottom-0 left-0 right-0 z-[7000] pointer-events-none">
+        <BottomNav
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          pendingRequests={incoming.length}
+        />
+      </div>
     </div>
   );
 }

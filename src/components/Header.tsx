@@ -3,11 +3,21 @@
 import { Crown } from "lucide-react";
 import Link from "next/link";
 
-export function Header() {
+interface HeaderProps {
+  floating?: boolean;
+}
+
+export function Header({ floating = false }: HeaderProps) {
   return (
-    <header className="flex items-center justify-between px-4 py-3 bg-surface/80 backdrop-blur-md border-b border-gold/10 shrink-0">
+    <header
+      className={`flex items-center justify-between px-4 py-3 glass-panel ${
+        floating
+          ? "absolute top-0 left-0 right-0 z-[6500]"
+          : "shrink-0 border-b border-zinc-800"
+      }`}
+    >
       <Link href="/" className="flex items-center gap-2.5 min-w-0">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-gold-dark shadow-lg shadow-gold/20">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-gold-dark gold-glow">
           <Crown className="h-5 w-5 text-background crown-pulse" />
         </div>
         <div className="min-w-0">

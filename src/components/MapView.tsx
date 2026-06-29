@@ -1,6 +1,7 @@
 "use client";
 
 import L from "leaflet";
+import { Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getClaimsForUser,
@@ -53,10 +54,17 @@ import { TabToggle } from "./TabToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFriendships } from "@/contexts/FriendshipsContext";
 import { getUserProfile } from "@/lib/user-registry";
+import {
+  createCrownIcon,
+  createPersonIcon,
+  MOCK_KINGDOMS,
+} from "@/lib/map-icons";
 
 const SF_CENTER: [number, number] = [37.7749, -122.4194];
-const TILE_URL =
-  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const DARK_BASE_TILE_URL =
+  "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png";
+const DARK_LABEL_TILE_URL =
+  "https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png";
 
 function resolveMonarchClaims(
   claims: Claim[],
@@ -91,30 +99,14 @@ function resolveMonarchClaims(
   return result;
 }
 
-function createPersonIcon(
-  color: string,
-  stroke: string,
-  initial: string,
-  size = 32
-): L.DivIcon {
-  return L.divIcon({
-    className: "",
-    html: `<div style="display:flex;align-items:center;justify-content:center;cursor:pointer;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.45));">
-      <div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid ${stroke};font-size:${size * 0.4}px;font-weight:700;color:#0c0a09;">${initial}</div>
-    </div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
-}
-
-const CLAIM_HERE_PREFIX = "user-spot-";
-
 function findLocationById(
   locations: Location[],
   locationId: string
 ): Location | undefined {
   return locations.find((l) => l.id === locationId);
 }
+
+const CLAIM_HERE_PREFIX = "user-spot-";
 
 interface MapViewProps {
   focusClaimId?: string | null;
@@ -140,9 +132,10 @@ export function MapView({
   const mapRef = useRef<L.Map | null>(null);
   const zonesRef = useRef<L.Rectangle[]>([]);
   const markersRef = useRef<L.Marker[]>([]);
+  const mockMarkersRef = useRef<L.Marker[]>([]);
+  const mockZonesRef = useRef<L.Circle[]>([]);
   const nearbyRef = useRef<L.Rectangle | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
-  const hasCenteredOnUser = useRef(false);
 
   const [activeTab, setActiveTab] = useState<MapTab>("community");
   const [claims, setClaims] = useState<Claim[]>([]);
@@ -364,14 +357,28 @@ export function MapView({
       zoomControl: false,
     });
 
-    L.tileLayer(TILE_URL, {
+    L.tileLayer(DARK_BASE_TILE_URL, {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
       subdomains: "abcd",
       maxZoom: 19,
     }).addTo(map);
 
+    L.tileLayer(DARK_LABEL_TILE_URL, {
+      subdomains: "abcd",
+      maxZoom: 19,
+      pane: "overlayPane",
+    }).addTo(map);
+
     L.control.zoom({ position: "topright" }).addTo(map);
+
+    const kingdomBounds = L.latLngBounds(
+      MOCK_KINGDOMS.map(
+        (kingdom) => [kingdom.latitude, kingdom.longitude] as [number, number]
+      )
+    );
+    map.fitBounds(kingdomBounds, { padding: [72, 48], maxZoom: 13 });
+
     mapRef.current = map;
     map.on("click", () => {
       setSelectedLocation(null);
@@ -384,17 +391,6 @@ export function MapView({
       mapRef.current = null;
     };
   }, []);
-
-  // Center on user when location is first known
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !userPosition || hasCenteredOnUser.current) return;
-
-    map.flyTo([userPosition.lat, userPosition.lng], USER_MAP_ZOOM, {
-      duration: 1.2,
-    });
-    hasCenteredOnUser.current = true;
-  }, [userPosition]);
 
   const openLocation = useCallback((location: LocationWithClaim) => {
     setSelectedLocation(location);
@@ -514,6 +510,52 @@ export function MapView({
       markersRef.current.push(marker);
     });
   }, [conqueredLocations, openLocation, openProfile, selectedProfileId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    mockMarkersRef.current.forEach((m) => m.remove());
+    mockMarkersRef.current = [];
+    mockZonesRef.current.forEach((z) => z.remove());
+    mockZonesRef.current = [];
+
+    for (const kingdom of MOCK_KINGDOMS) {
+      const zone = L.circle([kingdom.latitude, kingdom.longitude], {
+        radius: 120,
+        color: kingdom.stroke,
+        fillColor: kingdom.fill,
+        fillOpacity: 0.28,
+        weight: 2.5,
+        opacity: 0.85,
+        className: "kingdom-zone",
+      }).addTo(map);
+
+      mockZonesRef.current.push(zone);
+
+      const marker = L.marker([kingdom.latitude, kingdom.longitude], {
+        icon: createCrownIcon(kingdom.fill, kingdom.stroke),
+        zIndexOffset: 400,
+      })
+        .addTo(map)
+        .on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          map.flyTo([kingdom.latitude, kingdom.longitude], USER_MAP_ZOOM, {
+            duration: 0.8,
+          });
+          setClaimToast(`${kingdom.name}`);
+          window.setTimeout(() => setClaimToast(null), 2500);
+        });
+
+      marker.bindTooltip(kingdom.name, {
+        direction: "top",
+        offset: [0, -22],
+        className: "monarch-tooltip",
+      });
+
+      mockMarkersRef.current.push(marker);
+    }
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -765,22 +807,34 @@ export function MapView({
 
       <div className="absolute inset-0 z-[1000] pointer-events-none">
         {geoStatus === "pending" && (
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-surface-elevated/90 text-[10px] text-muted border border-gold/10">
+          <div className="absolute top-[4.5rem] left-1/2 -translate-x-1/2 px-3 py-1 rounded-full glass-panel text-[10px] text-muted">
             Finding your location…
           </div>
         )}
 
         {claimToast && (
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gold/90 text-background text-xs font-semibold shadow-lg pointer-events-none">
+          <div className="absolute top-[4.5rem] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gold/90 text-background text-xs font-semibold gold-glow pointer-events-none">
             {claimToast}
           </div>
         )}
 
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto">
+        <div className="absolute top-[4.5rem] left-1/2 -translate-x-1/2 pointer-events-auto">
           <TabToggle activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
 
-        <div className="absolute top-3 left-3 pointer-events-auto px-3 py-1.5 rounded-full bg-surface-elevated/90 backdrop-blur-sm border border-gold/10 text-xs text-muted">
+        <button
+          type="button"
+          aria-label="Leaderboard"
+          className="absolute top-[10.5rem] right-3 z-[1001] pointer-events-auto flex h-11 w-11 items-center justify-center rounded-xl glass-panel text-gold gold-glow hover:brightness-110 active:scale-95 transition-all"
+          onClick={() => {
+            setClaimToast("Leaderboard coming soon");
+            window.setTimeout(() => setClaimToast(null), 2500);
+          }}
+        >
+          <Trophy className="h-5 w-5" />
+        </button>
+
+        <div className="absolute top-[4.5rem] left-3 pointer-events-auto px-3 py-1.5 rounded-full glass-panel text-xs text-muted">
           {activeTab === "community" ? "Global Kingdoms" : "Friends Circle"}
           <span className="ml-1.5 text-foreground font-medium">
             {conqueredCount} explored

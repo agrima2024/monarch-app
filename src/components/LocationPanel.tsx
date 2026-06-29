@@ -176,7 +176,7 @@ export function LocationPanel({
               <button
                 type="button"
                 onClick={onClaim}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-gold to-gold-dark text-background font-semibold shadow-lg shadow-gold/20 hover:shadow-gold/40 transition-all"
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-gold to-gold-dark text-background font-semibold gold-glow hover:brightness-110 transition-all"
               >
                 <Crown className="h-5 w-5" />
                 Explore &amp; Claim Crown
