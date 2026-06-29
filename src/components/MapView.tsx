@@ -47,14 +47,20 @@ import type {
 } from "@/lib/types";
 import { ClaimCrownModal } from "./ClaimCrownModal";
 import { ClaimHereButton } from "./ClaimHereButton";
+import { GroupChatDrawer } from "./GroupChatDrawer";
+import { GroupSelector } from "./GroupSelector";
+import { Leaderboard } from "./Leaderboard";
 import { LocationPanel } from "./LocationPanel";
 import { MonarchLegend } from "./MonarchLegend";
 import { ProfilePanel } from "./ProfilePanel";
-import { TabToggle } from "./TabToggle";
+import { RoyalProclamationBar } from "./RoyalProclamationBar";
 import { useAuth } from "@/contexts/AuthContext";
-import { useFriendships } from "@/contexts/FriendshipsContext";
+import { useGroups } from "@/contexts/GroupsContext";
 import { getUserProfile } from "@/lib/user-registry";
+import { buildLeaderboard } from "@/lib/leaderboard";
+import { buildProclamations } from "@/lib/notifications";
 import {
+  createAvatarClusterIcon,
   createCrownIcon,
   createPersonIcon,
   MOCK_KINGDOMS,
@@ -70,9 +76,9 @@ function resolveMonarchClaims(
   claims: Claim[],
   tab: MapTab,
   userId: string,
-  friendIds: string[]
+  circleMemberIds: string[]
 ): Map<string, Claim> {
-  const circleIds = new Set([userId, ...friendIds]);
+  const circleIds = new Set(circleMemberIds);
 
   if (tab === "community") {
     return new Map(claims.map((c) => [c.location_id, c]));
@@ -124,7 +130,12 @@ export function MapView({
   hasBottomNav,
 }: MapViewProps = {}) {
   const { user } = useAuth();
-  const { friendIds } = useFriendships();
+  const {
+    groups,
+    selectedGroupId,
+    circleMemberIds,
+    selectGroup,
+  } = useGroups();
   const currentUserId = user!.id;
   const currentUsername = user!.username;
 
@@ -161,6 +172,8 @@ export function MapView({
   );
   const [sharedLocations, setSharedLocations] = useState<Location[]>([]);
   const [claimToast, setClaimToast] = useState<string | null>(null);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [groupChatOpen, setGroupChatOpen] = useState(false);
 
   const allLocations = useMemo(() => {
     const seen = new Set<string>();
@@ -180,12 +193,18 @@ export function MapView({
   }, [sharedLocations, localLocations, userClaimedLocations]);
 
   const monarchClaims = useMemo(
-    () => resolveMonarchClaims(claims, activeTab, currentUserId, friendIds),
-    [claims, activeTab, currentUserId, friendIds]
+    () =>
+      resolveMonarchClaims(
+        claims,
+        activeTab,
+        currentUserId,
+        circleMemberIds
+      ),
+    [claims, activeTab, currentUserId, circleMemberIds]
   );
 
   const locationsWithClaims: LocationWithClaim[] = useMemo(() => {
-    const circleIds = new Set([currentUserId, ...friendIds]);
+    const circleIds = new Set(circleMemberIds);
 
     return allLocations.map((loc) => {
       const claim = monarchClaims.get(loc.id);
@@ -203,7 +222,19 @@ export function MapView({
           }),
       };
     });
-  }, [monarchClaims, claims, activeTab, allLocations, currentUserId, friendIds]);
+  }, [monarchClaims, claims, activeTab, allLocations, circleMemberIds]);
+
+  const proclamations = useMemo(
+    () => buildProclamations(claims, currentUserId),
+    [claims, currentUserId]
+  );
+
+  const leaderboardEntries = useMemo(() => {
+    if (activeTab === "friends") {
+      return buildLeaderboard(claims, circleMemberIds);
+    }
+    return buildLeaderboard(claims);
+  }, [claims, activeTab, circleMemberIds]);
 
   const conqueredLocations = useMemo(
     () => locationsWithClaims.filter((loc) => loc.claim),
@@ -368,6 +399,7 @@ export function MapView({
       subdomains: "abcd",
       maxZoom: 19,
       pane: "overlayPane",
+      className: "leaflet-label-tiles",
     }).addTo(map);
 
     L.control.zoom({ position: "topright" }).addTo(map);
@@ -491,8 +523,50 @@ export function MapView({
 
       zonesRef.current.push(zone);
 
+      const useClusterPin = activeTab === "friends";
+      const satellites = useClusterPin
+        ? claims
+            .filter((item) => {
+              if (item.user_id === claim.user_id) return false;
+              if (!circleMemberIds.includes(item.user_id)) return false;
+              const otherLoc = allLocations.find(
+                (loc) => loc.id === item.location_id
+              );
+              if (!otherLoc) return false;
+              return (
+                haversineDistanceMeters(
+                  location.latitude,
+                  location.longitude,
+                  otherLoc.latitude,
+                  otherLoc.longitude
+                ) < 250
+              );
+            })
+            .slice(0, 2)
+            .map((item) => {
+              const colors = getMonarchColor(item.user_id);
+              const profile = getUserProfile(item.user_id);
+              return {
+                color: colors.fill,
+                stroke: colors.stroke,
+                initial: profile
+                  ? getUsernameInitial(profile.username)
+                  : "?",
+              };
+            })
+        : [];
+
+      const markerIcon = useClusterPin
+        ? createAvatarClusterIcon(
+            monarch.fill,
+            monarch.stroke,
+            initial,
+            satellites
+          )
+        : createPersonIcon(monarch.fill, monarch.stroke, initial);
+
       const marker = L.marker([location.latitude, location.longitude], {
-        icon: createPersonIcon(monarch.fill, monarch.stroke, initial),
+        icon: markerIcon,
         zIndexOffset: 500,
       })
         .addTo(map)
@@ -509,7 +583,16 @@ export function MapView({
 
       markersRef.current.push(marker);
     });
-  }, [conqueredLocations, openLocation, openProfile, selectedProfileId]);
+  }, [
+    conqueredLocations,
+    openLocation,
+    openProfile,
+    selectedProfileId,
+    activeTab,
+    claims,
+    allLocations,
+    circleMemberIds,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -799,10 +882,23 @@ export function MapView({
     [claims, currentUserId, selectedLocation]
   );
 
-  const conqueredCount = conqueredLocations.length;
+  const selectedGroupName =
+    groups.find((group) => group.id === selectedGroupId)?.name ?? "Friends Circle";
+
+  const flyToSharedLink = useCallback(
+    (lat: number, lng: number, label: string) => {
+      const map = mapRef.current;
+      if (!map) return;
+      map.flyTo([lat, lng], USER_MAP_ZOOM, { duration: 0.8 });
+      setGroupChatOpen(false);
+      setClaimToast(label);
+      window.setTimeout(() => setClaimToast(null), 2500);
+    },
+    []
+  );
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 h-screen">
       <div ref={mapContainer} className="absolute inset-0 z-0" />
 
       <div className="absolute inset-0 z-[1000] pointer-events-none">
@@ -813,32 +909,33 @@ export function MapView({
         )}
 
         {claimToast && (
-          <div className="absolute top-[4.5rem] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gold/90 text-background text-xs font-semibold gold-glow pointer-events-none">
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gold/90 text-background text-xs font-semibold shadow-[0_0_15px_rgba(251,191,36,0.35)] pointer-events-none z-[1002]">
             {claimToast}
           </div>
         )}
 
-        <div className="absolute top-[4.5rem] left-1/2 -translate-x-1/2 pointer-events-auto">
-          <TabToggle activeTab={activeTab} onTabChange={setActiveTab} />
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 pointer-events-auto z-[1001]">
+          <GroupSelector
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            groups={groups}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={selectGroup}
+            onOpenGroupChat={() => setGroupChatOpen(true)}
+          />
         </div>
 
         <button
           type="button"
           aria-label="Leaderboard"
-          className="absolute top-[10.5rem] right-3 z-[1001] pointer-events-auto flex h-11 w-11 items-center justify-center rounded-xl glass-panel text-gold gold-glow hover:brightness-110 active:scale-95 transition-all"
-          onClick={() => {
-            setClaimToast("Leaderboard coming soon");
-            window.setTimeout(() => setClaimToast(null), 2500);
-          }}
+          className="fixed top-[9.5rem] right-3 z-[1001] pointer-events-auto flex h-11 w-11 items-center justify-center rounded-xl bg-zinc-900/80 backdrop-blur-md border border-zinc-800/80 text-gold shadow-[0_0_15px_rgba(251,191,36,0.35)] hover:brightness-110 active:scale-95 transition-all"
+          onClick={() => setLeaderboardOpen(true)}
         >
           <Trophy className="h-5 w-5" />
         </button>
 
-        <div className="absolute top-[4.5rem] left-3 pointer-events-auto px-3 py-1.5 rounded-full glass-panel text-xs text-muted">
-          {activeTab === "community" ? "Global Kingdoms" : "Friends Circle"}
-          <span className="ml-1.5 text-foreground font-medium">
-            {conqueredCount} explored
-          </span>
+        <div className="fixed top-14 left-3 pointer-events-auto z-[1001]">
+          <RoyalProclamationBar messages={proclamations} />
         </div>
 
         <div className="pointer-events-auto">
@@ -871,6 +968,11 @@ export function MapView({
             location={selectedLocation}
             canClaim={canClaimLocation(selectedLocation)}
             isOwnClaim={selectedLocation.claim?.user_id === currentUserId}
+            isGroupMate={
+              !!selectedLocation.claim &&
+              circleMemberIds.includes(selectedLocation.claim.user_id) &&
+              selectedLocation.claim.user_id !== currentUserId
+            }
             raised={hasBottomNav}
             currentUserId={currentUserId}
             userVote={
@@ -910,6 +1012,23 @@ export function MapView({
           onSuccess={handleClaimSuccess}
         />
       )}
+
+      <Leaderboard
+        open={leaderboardOpen}
+        onClose={() => setLeaderboardOpen(false)}
+        title={
+          activeTab === "friends"
+            ? `${selectedGroupName} Leaderboard`
+            : "Global Leaderboard"
+        }
+        entries={leaderboardEntries}
+      />
+
+      <GroupChatDrawer
+        open={groupChatOpen}
+        onClose={() => setGroupChatOpen(false)}
+        onFlyToLink={flyToSharedLink}
+      />
     </div>
   );
 }

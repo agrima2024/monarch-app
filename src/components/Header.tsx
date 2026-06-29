@@ -10,13 +10,18 @@ interface HeaderProps {
 export function Header({ floating = false }: HeaderProps) {
   return (
     <header
-      className={`flex items-center justify-between px-4 py-3 glass-panel ${
+      className={`flex items-center justify-between px-4 py-3 ${
         floating
-          ? "absolute top-0 left-0 right-0 z-[6500]"
-          : "shrink-0 border-b border-zinc-800"
+          ? "absolute top-0 left-0 right-0 z-[6500] pointer-events-none"
+          : "shrink-0"
       }`}
     >
-      <Link href="/" className="flex items-center gap-2.5 min-w-0">
+      <Link
+        href="/"
+        className={`flex items-center gap-2.5 min-w-0 pointer-events-auto ${
+          floating ? "pt-[env(safe-area-inset-top,0px)]" : ""
+        }`}
+      >
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-gold-dark gold-glow">
           <Crown className="h-5 w-5 text-background crown-pulse" />
         </div>

@@ -12,6 +12,7 @@ interface ClaimVoteBarProps {
   currentUserId: string;
   userVote?: VoteType | null;
   onVote: (voteType: VoteType) => void;
+  rescueMode?: boolean;
 }
 
 export function ClaimVoteBar({
@@ -19,6 +20,7 @@ export function ClaimVoteBar({
   currentUserId,
   userVote,
   onVote,
+  rescueMode = false,
 }: ClaimVoteBarProps) {
   const isOwner = claim.user_id === currentUserId;
   const disgraced = isDisgraced(claim);
@@ -74,6 +76,16 @@ export function ClaimVoteBar({
           </div>
         )}
       </div>
+
+      {rescueMode && (
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/25">
+          <ThumbsUp className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-emerald-200/90">
+            Cooperative rescue: your circle mate needs endorsements. Visit this
+            territory and upvote to defend their crown.
+          </p>
+        </div>
+      )}
 
       {disgraced && daysLeft !== null && (
         <div className="flex items-start gap-2 p-3 rounded-xl bg-red-950/30 border border-red-500/25">

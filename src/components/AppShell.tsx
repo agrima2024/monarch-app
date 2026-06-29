@@ -25,7 +25,7 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="relative h-dvh overflow-hidden bg-background">
+    <div className="relative h-screen overflow-hidden bg-background">
       {activeTab === "map" && (
         <MapView
           focusClaimId={focusClaimId}

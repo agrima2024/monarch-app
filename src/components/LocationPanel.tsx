@@ -12,6 +12,7 @@ import {
 import { ClaimVoteBar } from "@/components/ClaimVoteBar";
 import { getUserProfile } from "@/lib/user-registry";
 import { formatCoordinates, getDisplayName, isUnexplored } from "@/lib/display";
+import { isDisgraced } from "@/lib/reputation";
 import { getMonarchColor } from "@/lib/monarch-colors";
 import type { LocationWithClaim, VoteType } from "@/lib/types";
 
@@ -19,6 +20,7 @@ interface LocationPanelProps {
   location: LocationWithClaim;
   canClaim: boolean;
   isOwnClaim: boolean;
+  isGroupMate?: boolean;
   raised?: boolean;
   currentUserId: string;
   userVote?: VoteType | null;
@@ -33,6 +35,7 @@ export function LocationPanel({
   location,
   canClaim,
   isOwnClaim,
+  isGroupMate = false,
   raised,
   currentUserId,
   userVote,
@@ -47,6 +50,8 @@ export function LocationPanel({
   const unexplored = isUnexplored(location);
   const displayName = getDisplayName(location);
   const monarchColor = claim ? getMonarchColor(claim.user_id) : null;
+  const disgraced = claim ? isDisgraced(claim) : false;
+  const rescueMode = isGroupMate && disgraced && canClaim;
 
   return (
     <div
@@ -154,6 +159,7 @@ export function LocationPanel({
               currentUserId={currentUserId}
               userVote={userVote}
               onVote={onVote}
+              rescueMode={rescueMode}
             />
             {isOwnClaim && (
               <button

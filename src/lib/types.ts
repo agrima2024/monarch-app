@@ -46,6 +46,35 @@ export interface Friendship {
 
 export type MapTab = "community" | "friends";
 
+export interface CircleGroup {
+  id: string;
+  name: string;
+  member_ids: string[];
+  created_by: string;
+  created_at: string;
+}
+
+export interface GroupMessage {
+  id: string;
+  group_id: string;
+  user_id: string;
+  text: string;
+  link_lat?: number;
+  link_lng?: number;
+  link_label?: string;
+  created_at: string;
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  username: string;
+  avatarInitial: string;
+  title: string;
+  totalScore: number;
+  territoryCount: number;
+  rank: number;
+}
+
 export interface LocationWithClaim extends Location {
   claim?: Claim;
   isMonarch?: boolean;

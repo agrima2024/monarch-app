@@ -34,6 +34,32 @@ export function createCrownIcon(
   });
 }
 
+export function createAvatarClusterIcon(
+  primaryColor: string,
+  primaryStroke: string,
+  primaryInitial: string,
+  satellites: { color: string; stroke: string; initial: string }[]
+): L.DivIcon {
+  const size = 40;
+  const satelliteHtml = satellites
+    .slice(0, 2)
+    .map(
+      (sat, index) =>
+        `<div style="position:absolute;top:${index === 0 ? -4 : 8}px;left:${index === 0 ? 24 : -6}px;background:${sat.color};width:18px;height:18px;border-radius:50%;border:2px solid ${sat.stroke};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#0c0a09;">${sat.initial}</div>`
+    )
+    .join("");
+
+  return L.divIcon({
+    className: "",
+    html: `<div class="gold-glow-marker" style="position:relative;width:${size}px;height:${size}px;cursor:pointer;">
+      ${satelliteHtml}
+      <div style="position:relative;background:${primaryColor};width:${size}px;height:${size}px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid ${primaryStroke};font-size:16px;font-weight:700;color:#0c0a09;box-shadow:0 0 15px rgba(251,191,36,0.35);">${primaryInitial}</div>
+    </div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
 export const MOCK_KINGDOMS = [
   {
     id: "mock-golden-gate",
