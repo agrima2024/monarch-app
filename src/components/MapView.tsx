@@ -22,12 +22,16 @@ import {
   purgeVotesForClaim,
   submitClaimVote,
 } from "@/lib/claim-votes";
-import { loadGlobalClaims, publishClaim, removeGlobalClaim } from "@/lib/global-claims";
+import { loadGlobalClaims, publishClaim, removeGlobalClaim, saveGlobalClaims } from "@/lib/global-claims";
 import {
   loadGlobalLocations,
   publishLocation,
   removeGlobalLocation,
+  saveGlobalLocations,
 } from "@/lib/global-locations";
+import { isSupabaseConfigured } from "@/lib/auth/config";
+import { generateClaimId } from "@/lib/ids";
+import { refreshCloudData } from "@/lib/supabase-data";
 import {
   CLAIM_HERE_MIN_DISTANCE_METERS,
   CLAIM_RADIUS_METERS,
@@ -251,11 +255,39 @@ export function MapView({
     [conqueredLocations]
   );
 
-  const reloadUserData = useCallback(() => {
+  const reloadUserData = useCallback(async () => {
     const stored = loadStoredClaims(currentUserId);
     const storedLocations = loadUserLocations(currentUserId);
-    const globalClaims = loadGlobalClaims();
-    const globalLocations = loadGlobalLocations();
+    let globalClaims = loadGlobalClaims();
+    let globalLocations = loadGlobalLocations();
+
+    if (isSupabaseConfigured()) {
+      try {
+        const remote = await refreshCloudData();
+        const claimByLocation = new Map<string, Claim>();
+        for (const claim of globalClaims) {
+          claimByLocation.set(claim.location_id, claim);
+        }
+        for (const claim of remote.claims) {
+          claimByLocation.set(claim.location_id, claim);
+        }
+        globalClaims = [...claimByLocation.values()];
+
+        const locationById = new Map<string, Location>();
+        for (const location of globalLocations) {
+          locationById.set(location.id, location);
+        }
+        for (const location of remote.locations) {
+          locationById.set(location.id, location);
+        }
+        globalLocations = [...locationById.values()];
+
+        saveGlobalClaims(globalClaims);
+        saveGlobalLocations(globalLocations);
+      } catch (error) {
+        console.warn("Cloud sync failed:", error);
+      }
+    }
 
     const migratedClaims = stored.filter((c) => c.location_id !== "claim-here");
     const migratedLocations = storedLocations.filter(
@@ -285,10 +317,34 @@ export function MapView({
   }, [currentUserId]);
 
   useEffect(() => {
-    reloadUserData();
-    const handler = () => reloadUserData();
+    void reloadUserData();
+    const handler = () => {
+      void reloadUserData();
+    };
     window.addEventListener(DATA_CHANGED_EVENT, handler);
     return () => window.removeEventListener(DATA_CHANGED_EVENT, handler);
+  }, [reloadUserData]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+
+    const refresh = () => {
+      void reloadUserData();
+    };
+
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    });
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [reloadUserData]);
 
   useEffect(() => {
@@ -779,7 +835,7 @@ export function MapView({
     ]);
 
     const newClaim = withFreshClaimDefaults({
-      id: `claim-${Date.now()}`,
+      id: generateClaimId(),
       location_id: claimingLocation.id,
       user_id: currentUserId,
       place_name: placeName,

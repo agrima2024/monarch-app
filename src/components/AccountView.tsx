@@ -23,9 +23,11 @@ import { loadGlobalClaims, removeGlobalClaim } from "@/lib/global-claims";
 import { removeGlobalLocation } from "@/lib/global-locations";
 import { getMonarchColor } from "@/lib/monarch-colors";
 import { daysUntilDethroned, isDisgraced } from "@/lib/reputation";
-import type { Claim } from "@/lib/types";
+import type { Claim, Profile } from "@/lib/types";
 import { getUsernameInitial, getUserProfile } from "@/lib/user-registry";
 import { InviteFriendButton } from "@/components/InviteFriendButton";
+import { UsernameSearchInput } from "@/components/UsernameSearchInput";
+import { resolveProfileFromQuery } from "@/lib/profile-search";
 
 interface AccountViewProps {
   onViewTerritoryOnMap?: (claimId: string) => void;
@@ -36,13 +38,13 @@ export function AccountView({
   onViewTerritoryOnMap,
   onOpenProfile,
 }: AccountViewProps) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isSupabaseMode } = useAuth();
   const router = useRouter();
   const {
     friendIds,
     incoming,
     outgoing,
-    requestFriend,
+    requestFriendById,
     acceptRequest,
     declineRequest,
   } = useFriendships();
@@ -88,10 +90,34 @@ export function AccountView({
     setError(null);
     setInfo(null);
     setIsSubmitting(true);
-    const message = await requestFriend(username);
+
+    const profile =
+      (await resolveProfileFromQuery(username, user.id)) ??
+      null;
+
+    if (!profile) {
+      setError("No explorer found with that username.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const message = await requestFriendById(profile.id);
     if (message) setError(message);
     else {
-      setInfo(`Request sent to @${username.trim().replace(/^@/, "")}.`);
+      setInfo(`Request sent to @${profile.username}.`);
+      setUsername("");
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleSelectUser = async (profile: Profile) => {
+    setError(null);
+    setInfo(null);
+    setIsSubmitting(true);
+    const message = await requestFriendById(profile.id);
+    if (message) setError(message);
+    else {
+      setInfo(`Request sent to @${profile.username}.`);
       setUsername("");
     }
     setIsSubmitting(false);
@@ -142,6 +168,14 @@ export function AccountView({
         </section>
 
         <InviteFriendButton userId={user.id} username={user.username} />
+
+        {!isSupabaseMode && (
+          <section className="rounded-2xl border border-amber-500/25 bg-amber-950/20 p-4 text-sm text-amber-100/90 leading-relaxed">
+            Map and friend search sync across devices when cloud sign-in is
+            enabled. On this browser-only mode, you only see explorers who use
+            the same device.
+          </section>
+        )}
 
         <section className="rounded-2xl border border-gold/15 bg-gold/5 p-4">
           <p className="text-sm text-foreground/90 leading-relaxed">
@@ -303,13 +337,14 @@ export function AccountView({
           <p className="text-xs text-muted">
             Can&apos;t find them on the map? Look them up here instead.
           </p>
-          <form onSubmit={handleRequest} className="flex gap-2">
-            <input
-              type="text"
+          <form onSubmit={handleRequest} className="flex gap-2 items-start">
+            <UsernameSearchInput
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter their username"
-              className="flex-1 rounded-xl bg-surface border border-gold/10 px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none focus:border-gold/40"
+              onChange={setUsername}
+              onSelectUser={handleSelectUser}
+              currentUserId={user.id}
+              placeholder="Search username"
+              disabled={isSubmitting}
             />
             <button
               type="submit"

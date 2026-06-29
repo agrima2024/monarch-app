@@ -1,4 +1,5 @@
 import type { Claim } from "./types";
+import { removeRemoteClaim, syncClaimToRemote } from "./supabase-data";
 
 const GLOBAL_CLAIMS_KEY = "monarch-global-claims";
 
@@ -18,12 +19,14 @@ export function publishClaim(claim: Claim): void {
   const existing = loadGlobalClaims();
   const next = [...existing.filter((item) => item.id !== claim.id), claim];
   localStorage.setItem(GLOBAL_CLAIMS_KEY, JSON.stringify(next));
+  void syncClaimToRemote(claim);
 }
 
 export function removeGlobalClaim(claimId: string): void {
   if (typeof window === "undefined") return;
   const next = loadGlobalClaims().filter((item) => item.id !== claimId);
   localStorage.setItem(GLOBAL_CLAIMS_KEY, JSON.stringify(next));
+  void removeRemoteClaim(claimId);
 }
 
 export function removeGlobalClaimForLocation(locationId: string): void {
@@ -36,4 +39,9 @@ export function removeGlobalClaimForLocation(locationId: string): void {
 
 export function getClaimsForUser(userId: string, claims: Claim[]): Claim[] {
   return claims.filter((claim) => claim.user_id === userId);
+}
+
+export function saveGlobalClaims(claims: Claim[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(GLOBAL_CLAIMS_KEY, JSON.stringify(claims));
 }

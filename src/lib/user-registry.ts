@@ -1,4 +1,5 @@
 import type { Profile } from "./types";
+import { getCachedProfile } from "./profile-cache";
 
 const REGISTRY_KEY = "monarch-user-registry";
 
@@ -123,6 +124,9 @@ export function authenticateLocalUser(
 }
 
 export function getUserProfile(userId: string): Profile | undefined {
+  const cached = getCachedProfile(userId);
+  if (cached) return cached;
+
   const user = findUserById(userId);
   if (!user) return undefined;
 
@@ -132,6 +136,28 @@ export function getUserProfile(userId: string): Profile | undefined {
     avatar_url: null,
     created_at: user.created_at,
   };
+}
+
+export function searchLocalUsersByPrefix(
+  query: string,
+  excludeUserId?: string,
+  limit = 8
+): Profile[] {
+  const normalized = query.trim().replace(/^@/, "").toLowerCase();
+  if (normalized.length < 1) return [];
+
+  return listRegisteredUsers()
+    .filter((user) => {
+      if (excludeUserId && user.id === excludeUserId) return false;
+      return user.username.toLowerCase().includes(normalized);
+    })
+    .slice(0, limit)
+    .map((user) => ({
+      id: user.id,
+      username: user.username,
+      avatar_url: null,
+      created_at: user.created_at,
+    }));
 }
 
 export function getUsernameInitial(username: string): string {
